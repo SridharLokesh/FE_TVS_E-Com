@@ -1,24 +1,34 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
 /* ── CSS Variables — single source of truth for TVS brand colors ── */
 :root {
-  --brand:        #0a1f44;   /* TVS Navy Blue  */
-  --brand-hover:  #0d2657;   /* slightly lighter navy */
-  --brand-light:  #e8eef7;   /* pale blue bg   */
-  --accent:       #1e40af;   /* bright blue for highlights */
+  --brand: #0a1f44; /* TVS Navy Blue  */
+  --brand-hover: #0d2657; /* slightly lighter navy */
+  --brand-light: #e8eef7; /* pale blue bg   */
+  --accent: #1e40af; /* bright blue for highlights */
 }
 
 @layer base {
-  *, *::before, *::after { box-sizing: border-box; margin: 0; }
-  html { scroll-behavior: smooth; }
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family:
+      "Inter",
+      system-ui,
+      -apple-system,
+      sans-serif;
     @apply text-gray-900 bg-white antialiased;
   }
 }
 
 @layer components {
-
   /* ─── Card ─── */
   .card {
     @apply bg-white rounded-2xl border border-gray-200 shadow-sm;
@@ -44,7 +54,7 @@
            transition-all duration-150 active:scale-95
            cursor-pointer select-none bg-white;
     border-color: var(--brand);
-    color:        var(--brand);
+    color: var(--brand);
   }
   .btn-secondary:hover {
     background-color: var(--brand-light);
@@ -97,10 +107,30 @@
 }
 
 @layer utilities {
-  .no-scrollbar::-webkit-scrollbar { display: none; }
-  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 
-  .line-clamp-1 { overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1; }
-  .line-clamp-2 { overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2; }
-  .line-clamp-3 { overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3; }
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .line-clamp-3 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
 }

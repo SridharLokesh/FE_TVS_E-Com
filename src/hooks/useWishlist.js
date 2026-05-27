@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import api from '../../utils/api';
-import toast from 'react-hot-toast';
+import { useState, useEffect, useCallback } from "react";
+import api from "../utils/api";
+import toast from "react-hot-toast";
 
 export const useWishlist = (isLoggedIn) => {
   const [wishlist, setWishlist] = useState({ products: [] });
@@ -9,22 +9,24 @@ export const useWishlist = (isLoggedIn) => {
   const fetchWishlist = useCallback(async () => {
     if (!isLoggedIn) return;
     try {
-      const { data } = await api.get('/wishlist');
+      const { data } = await api.get("/wishlist");
       setWishlist(data);
     } catch {}
   }, [isLoggedIn]);
 
-  useEffect(() => { fetchWishlist(); }, [fetchWishlist]);
+  useEffect(() => {
+    fetchWishlist();
+  }, [fetchWishlist]);
 
   const addToWishlist = useCallback(async (productId) => {
     setLoading(true);
     try {
-      const { data } = await api.post('/wishlist/add', { productId });
+      const { data } = await api.post("/wishlist/add", { productId });
       setWishlist(data);
-      toast.success('Added to wishlist! ❤️', { icon: '❤️' });
+      toast.success("Added to wishlist! ❤️", { icon: "❤️" });
       return true;
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to add to wishlist');
+      toast.error(err.response?.data?.message || "Failed to add to wishlist");
       return false;
     } finally {
       setLoading(false);
@@ -35,17 +37,28 @@ export const useWishlist = (isLoggedIn) => {
     try {
       const { data } = await api.delete(`/wishlist/remove/${productId}`);
       setWishlist(data);
-      toast.success('Removed from wishlist');
+      toast.success("Removed from wishlist");
     } catch {
-      toast.error('Failed to remove');
+      toast.error("Failed to remove");
     }
   }, []);
 
-  const isInWishlist = useCallback((productId) => {
-    return wishlist.products?.some(p => (p._id || p) === productId);
-  }, [wishlist]);
+  const isInWishlist = useCallback(
+    (productId) => {
+      return wishlist.products?.some((p) => (p._id || p) === productId);
+    },
+    [wishlist],
+  );
 
   const wishlistCount = wishlist.products?.length || 0;
 
-  return { wishlist, loading, wishlistCount, fetchWishlist, addToWishlist, removeFromWishlist, isInWishlist };
+  return {
+    wishlist,
+    loading,
+    wishlistCount,
+    fetchWishlist,
+    addToWishlist,
+    removeFromWishlist,
+    isInWishlist,
+  };
 };

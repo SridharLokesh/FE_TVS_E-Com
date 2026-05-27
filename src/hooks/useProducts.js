@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import api from '../../utils/api';
+import { useState, useCallback } from "react";
+import api from "../utils/api";
 
 export const useProducts = () => {
   const [products, setProducts] = useState([]);
@@ -16,7 +16,7 @@ export const useProducts = () => {
       setProducts(data.products);
       setPagination({ total: data.total, page: data.page, pages: data.pages });
     } catch (err) {
-      console.error('Fetch products error:', err);
+      console.error("Fetch products error:", err);
     } finally {
       setLoading(false);
     }
@@ -29,16 +29,21 @@ export const useProducts = () => {
       setProduct(data);
       return data;
     } catch (err) {
-      console.error('Fetch product error:', err);
+      console.error("Fetch product error:", err);
     } finally {
       setLoading(false);
     }
   }, []);
 
   const searchProducts = useCallback(async (query) => {
-    if (!query || query.length < 1) { setSearchResults([]); return; }
+    if (!query || query.length < 1) {
+      setSearchResults([]);
+      return;
+    }
     try {
-      const { data } = await api.get(`/products/search?q=${encodeURIComponent(query)}`);
+      const { data } = await api.get(
+        `/products/search?q=${encodeURIComponent(query)}`,
+      );
       setSearchResults(data);
     } catch {
       setSearchResults([]);
@@ -47,5 +52,15 @@ export const useProducts = () => {
 
   const clearSearch = () => setSearchResults([]);
 
-  return { products, product, loading, searchResults, pagination, fetchProducts, fetchProduct, searchProducts, clearSearch };
+  return {
+    products,
+    product,
+    loading,
+    searchResults,
+    pagination,
+    fetchProducts,
+    fetchProduct,
+    searchProducts,
+    clearSearch,
+  };
 };
