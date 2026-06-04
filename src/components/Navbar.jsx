@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useProducts } from "../hooks/useProducts";
 import TVS_logo from "../assets/TVS_logo.png";
+import api from "../utils/api";
 
 export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPillsVisible }) {
   const { user, logout, isLoggedIn } = auth || {};
@@ -51,17 +52,29 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
   const pillsAreHidden = subPillsVisible === false;
 
   /* ── Fetch categories ── */
-  useEffect(() => {
-    setCatsLoading(true);
-    fetch("/api/categories?nav=true")
-      .then(r => r.ok ? r.json() : [])
-      .then(data => {
-        if (Array.isArray(data))
-          setCategories([...data].sort((a, b) => (a.navOrder ?? 99) - (b.navOrder ?? 99)));
-      })
-      .catch(() => {})
-      .finally(() => setCatsLoading(false));
-  }, []);
+ useEffect(() => {
+  const loadCategories = async () => {
+    try {
+      setCatsLoading(true);
+
+      const { data } = await api.get("/categories?nav=true");
+
+      if (Array.isArray(data)) {
+        setCategories(
+          [...data].sort(
+            (a, b) => (a.navOrder ?? 99) - (b.navOrder ?? 99)
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Category fetch error:", error);
+    } finally {
+      setCatsLoading(false);
+    }
+  };
+
+  loadCategories();
+}, []);
 
   /* ── Measure header height ── */
   useEffect(() => {
