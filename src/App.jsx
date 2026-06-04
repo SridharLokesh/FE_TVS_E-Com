@@ -1,127 +1,145 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
-import Navbar from "./components/Navbar";
-import Footer from "./components/Footer";
-import HomePage from "./pages/HomePage";
-import ProductsPage from "./pages/ProductsPage";
-import ProductDetailPage from "./pages/ProductDetailPage";
-import LoginPage from "./pages/LoginPage";
-import RegisterPage from "./pages/RegisterPage";
-import CartPage from "./pages/CartPage";
-import WishlistPage from "./pages/WishlistPage";
-import ProfilePage from "./pages/ProfilePage";
-//import OrdersPage from './pages/OrdersPage';
-import CheckoutPage from "./pages/CheckoutPage";
-import CustomerCarePage from "./pages/CustomerCarePage";
-import AdminDashboard from "./pages/AdminDashboard";
-import { useAuth } from "./hooks/useAuth";
-import { useCart } from "./hooks/useCart";
-import { useWishlist } from "./hooks/useWishlist";
+import { Suspense, lazy, useState, useCallback } from "react";
+
+import { useAuth }          from "./hooks/useAuth";
+import { useCart }          from "./hooks/useCart";
+import { useWishlist }      from "./hooks/useWishlist";
+import { useNotifications } from "./hooks/useNotifications";
+
+import Navbar      from "./components/Navbar";
+import Footer      from "./components/Footer";
 import ScrollToTop from "./components/ScrollToTop";
 
-function ProtectedRoute({ children, user }) {
-  return user ? children : <Navigate to="/login" replace />;
+const HomePage          = lazy(() => import("./pages/HomePage"));
+const LoginPage         = lazy(() => import("./pages/LoginPage"));
+const RegisterPage      = lazy(() => import("./pages/RegisterPage"));
+const ProductsPage      = lazy(() => import("./pages/ProductsPage"));
+const ProductDetailPage = lazy(() => import("./pages/ProductDetailPage"));
+const CartPage          = lazy(() => import("./pages/CartPage"));
+const WishlistPage      = lazy(() => import("./pages/WishlistPage"));
+const CheckoutPage      = lazy(() => import("./pages/CheckoutPage"));
+const ProfilePage       = lazy(() => import("./pages/ProfilePage"));
+const InvoicePage       = lazy(() => import("./pages/InvoicePage"));
+const BecomeDealerPage  = lazy(() => import("./pages/BecomeDealerPage"));
+const DealerDashboard   = lazy(() => import("./pages/DealerDashboard"));
+const AdminDashboard    = lazy(() => import("./pages/AdminDashboard"));
+const CustomerCarePage  = lazy(() => import("./pages/CustomerCarePage"));
+const NotFoundPage      = lazy(() => import("./pages/NotFoundPage"));
+
+function PageSpinner() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-[#0a1f44] border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
 }
 
-function AdminRoute({ children, user }) {
-  if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "admin") return <Navigate to="/" replace />;
+function RequireAuth({ children, roles, user, isLoggedIn }) {
+  const location = useLocation();
+  if (!isLoggedIn)
+    return <Navigate to={`/login?redirect=${location.pathname}`} replace />;
+  if (roles && !roles.includes(user?.role))
+    return <Navigate to="/" replace />;
+  return children;
+}
+
+function GuestOnly({ children, isLoggedIn, authLoading }) {
+  if (authLoading) return <PageSpinner />;
+  if (isLoggedIn)  return <Navigate to="/" replace />;
   return children;
 }
 
 export default function App() {
-  const auth = useAuth();
-  const cartHook = useCart(auth.isLoggedIn);
-  const wishlistHook = useWishlist(auth.isLoggedIn);
+  const auth         = useAuth();
+  const { user, isLoggedIn, loading: authLoading } = auth;
+  const cartHook     = useCart(isLoggedIn, user?.role);
+  const wishlistHook = useWishlist(isLoggedIn, user?.role);
+  const notifHook    = useNotifications(isLoggedIn);
 
-  const shared = { auth, cartHook, wishlistHook };
+  // ── Sub-pill visibility bridge ─────────────────────────────────────
+  // ProductsPage reports whether its sub-category pills are on screen.
+  // Navbar reads this to decide whether to show the sticky sub bar.
+  // true  = pills visible on page → don't show sticky sub bar
+  // false = pills scrolled out   → show sticky sub bar
+  const [subPillsVisible, setSubPillsVisible] = useState(true);
+  const handleSubPillsVisibility = useCallback((visible) => setSubPillsVisible(visible), []);
+
+  const sharedProps = { auth, cartHook, wishlistHook, notifHook };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <Toaster position="top-center" toastOptions={{ duration: 2500 }} />
-      <ScrollToTop />
-      {/* Fixed navbar – height ≈ 110px desktop (promo 28 + main 52 + categories 36) */}
-      <Navbar auth={auth} cartHook={cartHook} wishlistHook={wishlistHook} />
+    <>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3500,
+          style: { background: "#1e293b", color: "#f8fafc", borderRadius: "12px", fontSize: "14px", fontWeight: 500 },
+          success: { iconTheme: { primary: "#22c55e", secondary: "#fff" } },
+          error:   { iconTheme: { primary: "#ef4444", secondary: "#fff" } },
+        }}
+      />
 
-      {/*
-        Push content below the fixed navbar.
-        Navbar has: promo bar (hidden on mobile) + main row + category row.
-        Desktop: ~116px  |  Mobile: ~88px  (no promo)
-        We use CSS variables so it's easy to tweak in one place.
-      */}
-      <main className="flex-1 pt-[88px] md:pt-[116px]">
-        <Routes>
-          {/* ── Public ── */}
-          <Route path="/" element={<HomePage {...shared} />} />
-          <Route path="/products" element={<ProductsPage {...shared} />} />
-          <Route
-            path="/products/category/:category"
-            element={<ProductsPage {...shared} />}
-          />
-          <Route
-            path="/products/:id"
-            element={<ProductDetailPage {...shared} />}
-          />
-          <Route path="/login" element={<LoginPage auth={auth} />} />
-          <Route path="/register" element={<RegisterPage auth={auth} />} />
-          <Route path="/customer-care" element={<CustomerCarePage />} />
-          <Route path="/become-seller" element={<CustomerCarePage />} />
+      <div className="flex flex-col min-h-screen">
+        <ScrollToTop />
 
-          {/* ── Protected ── */}
-          <Route
-            path="/cart"
-            element={
-              <ProtectedRoute user={auth.user}>
-                <CartPage cartHook={cartHook} />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/wishlist"
-            element={
-              <ProtectedRoute user={auth.user}>
-                <WishlistPage {...shared} />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute user={auth.user}>
-                <ProfilePage auth={auth} />
-              </ProtectedRoute>
-            }
-          />
-          {/*     <Route path="/orders" element={
-            <ProtectedRoute user={auth.user}>
-              <OrdersPage auth={auth} />
-            </ProtectedRoute>
-          } /> */}
-          <Route
-            path="/checkout"
-            element={
-              <ProtectedRoute user={auth.user}>
-                <CheckoutPage auth={auth} cartHook={cartHook} />
-              </ProtectedRoute>
-            }
-          />
+        {/* Pass subPillsVisible so Navbar knows when to show sticky sub bar */}
+        <Navbar {...sharedProps} subPillsVisible={subPillsVisible} />
 
-          {/* ── Admin ── */}
-          <Route
-            path="/admin"
-            element={
-              <AdminRoute user={auth.user}>
-                <AdminDashboard auth={auth} />
-              </AdminRoute>
-            }
-          />
+        <main className="flex-1 pt-[116px] md:pt-[148px]">
+          <Suspense fallback={<PageSpinner />}>
+            <Routes>
+              <Route path="/" element={<HomePage {...sharedProps} />} />
 
-          {/* ── 404 fallback ── */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
+              {/* /products/category/:cat MUST be before /products/:id */}
+              <Route path="/products"
+                element={<ProductsPage {...sharedProps} onSubPillsVisibilityChange={handleSubPillsVisibility} />}
+              />
+              <Route path="/products/category/:cat"
+                element={<ProductsPage {...sharedProps} onSubPillsVisibilityChange={handleSubPillsVisibility} />}
+              />
+              <Route path="/products/:id"
+                element={<ProductDetailPage {...sharedProps} />}
+              />
 
-      <Footer />
-    </div>
+              <Route path="/become-dealer" element={<BecomeDealerPage />} />
+              <Route path="/customer-care" element={<CustomerCarePage />} />
+              <Route path="/orders"        element={<Navigate to="/profile?tab=orders" replace />} />
+
+              <Route path="/login"
+                element={<GuestOnly isLoggedIn={isLoggedIn} authLoading={authLoading}><LoginPage auth={auth} /></GuestOnly>}
+              />
+              <Route path="/register"
+                element={<GuestOnly isLoggedIn={isLoggedIn} authLoading={authLoading}><RegisterPage auth={auth} /></GuestOnly>}
+              />
+
+              <Route path="/cart"
+                element={<RequireAuth roles={["user"]} user={user} isLoggedIn={isLoggedIn}><CartPage {...sharedProps} /></RequireAuth>}
+              />
+              <Route path="/wishlist"
+                element={<RequireAuth roles={["user"]} user={user} isLoggedIn={isLoggedIn}><WishlistPage {...sharedProps} /></RequireAuth>}
+              />
+              <Route path="/checkout"
+                element={<RequireAuth roles={["user"]} user={user} isLoggedIn={isLoggedIn}><CheckoutPage {...sharedProps} /></RequireAuth>}
+              />
+              <Route path="/profile"
+                element={<RequireAuth roles={["user"]} user={user} isLoggedIn={isLoggedIn}><ProfilePage auth={auth} /></RequireAuth>}
+              />
+              <Route path="/invoice"
+                element={<RequireAuth roles={["user"]} user={user} isLoggedIn={isLoggedIn}><InvoicePage auth={auth} /></RequireAuth>}
+              />
+              <Route path="/dealer"
+                element={<RequireAuth roles={["dealer"]} user={user} isLoggedIn={isLoggedIn}><DealerDashboard auth={auth} /></RequireAuth>}
+              />
+              <Route path="/admin"
+                element={<RequireAuth roles={["admin"]} user={user} isLoggedIn={isLoggedIn}><AdminDashboard auth={auth} /></RequireAuth>}
+              />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </Suspense>
+        </main>
+
+        <Footer />
+      </div>
+    </>
   );
 }
