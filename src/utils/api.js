@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://backend-focus-seu6.onrender.com',
+  baseURL: import.meta.env.VITE_API_URL || 'https://backend-focus-seu6.onrender.com/api',
   timeout: 15000,
 });
 // Attach JWT from localStorage

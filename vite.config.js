@@ -13,7 +13,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target:'https://backend-focus-seu6.onrender.com',
+        target:'https://backend-focus-seu6.onrender.com/api',
         changeOrigin: true,
         secure: false,
       },
