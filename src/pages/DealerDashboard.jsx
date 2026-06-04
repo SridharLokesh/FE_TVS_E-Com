@@ -67,20 +67,26 @@ function mergeCategories(defaults, dbCats) {
 let _catCache   = null;
 let _catPromise = null;
 function loadCategories() {
-  if (_catCache)   return Promise.resolve(_catCache);
+  if (_catCache) return Promise.resolve(_catCache);
   if (_catPromise) return _catPromise;
-  _catPromise = fetch("/api/categories")
-    .then(r => r.ok ? r.json() : [])
-    .then(data => {
-      _catCache = Array.isArray(data) && data.length > 0
-        ? mergeCategories(DEFAULT_CATEGORIES, data)
-        : DEFAULT_CATEGORIES;
+
+  _catPromise = api
+    .get("/categories")
+    .then(({ data }) => {
+      _catCache =
+        Array.isArray(data) && data.length > 0
+          ? mergeCategories(DEFAULT_CATEGORIES, data)
+          : DEFAULT_CATEGORIES;
+
       return _catCache;
     })
-    .catch(() => { _catCache = DEFAULT_CATEGORIES; return _catCache; });
+    .catch(() => {
+      _catCache = DEFAULT_CATEGORIES;
+      return _catCache;
+    });
+
   return _catPromise;
 }
-
 const STATUS_BADGE = {
   Placed:     'bg-gray-100 text-[#0a1f44]',
   Processing: 'bg-gray-100 text-[#0a1f44]',
