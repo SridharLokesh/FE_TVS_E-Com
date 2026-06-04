@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https:backend-focus-seu6.onrender.com' || import.meta.env.VITE_API_URL ,
+  baseURL: 'https://backend-focus-seu6.onrender.com' || import.meta.env.VITE_API_URL ,
   timeout: 15000,
 });
 
