@@ -4,7 +4,6 @@ const api = axios.create({
   baseURL: 'https://backend-focus-seu6.onrender.com' || import.meta.env.VITE_API_URL ,
   timeout: 15000,
 });
-
 // Attach JWT from localStorage
 api.interceptors.request.use((config) => {
   try {
