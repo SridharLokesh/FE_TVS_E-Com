@@ -30,6 +30,9 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
   const [mobileExpandedCat, setMobileExpandedCat]  = useState(null);
   const [headerHeight,      setHeaderHeight]        = useState(0);
   const [openCatDropdown,   setOpenCatDropdown]    = useState(null);
+  // Holds sub-categories for the currently open dropdown — fetched fresh when opened
+  const [dropdownSubs,      setDropdownSubs]       = useState([]);
+  const [dropdownCatName,   setDropdownCatName]    = useState("");
 
   const searchRef   = useRef(null);
   const moreRef     = useRef(null);
@@ -42,49 +45,49 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
   const isDealer = user?.role === "dealer";
   const isAdmin  = user?.role === "admin";
   const isUser   = user?.role === "user";
-
-  // Only regular customers see cart & wishlist
   const showCartWishlist = isLoggedIn && isUser;
 
   const activeCatSlug = location.pathname.match(/\/products\/category\/([^/?]+)/)?.[1]?.toLowerCase() || null;
   const activeSubSlug = new URLSearchParams(location.search).get("sub") || null;
 
+  // pillsAreHidden = true only when ProductsPage explicitly reports false
   const pillsAreHidden = subPillsVisible === false;
 
-  /* ── Fetch categories ── */
+  /* ── Fetch all nav categories ── */
   useEffect(() => {
-    const loadCategories = async () => {
+    const load = async () => {
       try {
         setCatsLoading(true);
         const { data } = await api.get("/categories?nav=true");
-        if (Array.isArray(data)) {
+        if (Array.isArray(data))
           setCategories([...data].sort((a, b) => (a.navOrder ?? 99) - (b.navOrder ?? 99)));
-        }
-      } catch (error) {
-        console.error("Category fetch error:", error);
+      } catch (e) {
+        console.error("Category fetch error:", e);
       } finally {
         setCatsLoading(false);
       }
     };
-    loadCategories();
+    load();
   }, []);
 
   /* ── Measure header height ── */
   useEffect(() => {
-    const measure = () => {
-      if (headerRef.current) setHeaderHeight(headerRef.current.offsetHeight);
-    };
+    const measure = () => { if (headerRef.current) setHeaderHeight(headerRef.current.offsetHeight); };
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
 
-  /* ── Auto-close dropdown when sub-pills come back into view ── */
+  /* ── Close dropdown when sub-pills come back into view ── */
   useEffect(() => {
-    if (!pillsAreHidden) setOpenCatDropdown(null);
+    if (!pillsAreHidden) {
+      setOpenCatDropdown(null);
+      setDropdownSubs([]);
+      setDropdownCatName("");
+    }
   }, [pillsAreHidden]);
 
-  /* ── Close all panels on route change ── */
+  /* ── Close menus on pathname change only ── */
   useEffect(() => {
     setShowMoreMenu(false);
     setShowUserMenu(false);
@@ -93,29 +96,37 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
     setSearchQuery("");
     setMobileExpandedCat(null);
     setOpenCatDropdown(null);
+    setDropdownSubs([]);
+    setDropdownCatName("");
     clearSearch?.();
-  }, [location.pathname, location.search]);
+  }, [location.pathname]);
 
-  /* ── Global click-outside handler ── */
+  /* ── Click-outside (capture phase) ── */
   useEffect(() => {
     const h = (e) => {
-      if (moreRef.current   && !moreRef.current.contains(e.target))   setShowMoreMenu(false);
-      if (userRef.current   && !userRef.current.contains(e.target))   setShowUserMenu(false);
-      if (notifRef.current  && !notifRef.current.contains(e.target))  setShowNotifPanel(false);
+      if (moreRef.current  && !moreRef.current.contains(e.target))  setShowMoreMenu(false);
+      if (userRef.current  && !userRef.current.contains(e.target))  setShowUserMenu(false);
+      if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotifPanel(false);
       if (searchRef.current && !searchRef.current.contains(e.target)) clearSearch?.();
-      setOpenCatDropdown(null);
+      if (openCatDropdown) {
+        const pillEl = pillRefs.current[openCatDropdown];
+        if (pillEl && !pillEl.contains(e.target)) {
+          setOpenCatDropdown(null);
+          setDropdownSubs([]);
+          setDropdownCatName("");
+        }
+      }
     };
-    document.addEventListener("click", h);
-    return () => document.removeEventListener("click", h);
-  }, []);
+    document.addEventListener("click", h, true);
+    return () => document.removeEventListener("click", h, true);
+  }, [openCatDropdown]);
 
   /* ── Search ── */
   const handleSearchChange = useCallback((e) => {
     const val = e.target.value;
     setSearchQuery(val);
     clearTimeout(searchTimer.current);
-    if (val.length > 0)
-      searchTimer.current = setTimeout(() => searchProducts?.(val), 220);
+    if (val.length > 0) searchTimer.current = setTimeout(() => searchProducts?.(val), 220);
     else clearSearch?.();
   }, [searchProducts, clearSearch]);
 
@@ -132,16 +143,20 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
     }
   };
 
-  /* ── Navigation helpers ── */
+  /* ── Navigation ── */
   const goCategory = useCallback((slug) => {
     setMobileMenuOpen(false);
     setOpenCatDropdown(null);
+    setDropdownSubs([]);
+    setDropdownCatName("");
     navigate(`/products/category/${slug}`);
   }, [navigate]);
 
   const goSubCategory = useCallback((catSlug, subSlug) => {
     setMobileMenuOpen(false);
     setOpenCatDropdown(null);
+    setDropdownSubs([]);
+    setDropdownCatName("");
     navigate(`/products/category/${catSlug}?sub=${subSlug}`);
   }, [navigate]);
 
@@ -150,15 +165,51 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
   const toggleMobileCat = (slug) => setMobileExpandedCat(p => p === slug ? null : slug);
 
   /* ── Derived ── */
+  // activeSubs from the pre-loaded categories list (used for showDropdownTrigger check)
   const activeCatObj  = categories.find(c => c.slug === activeCatSlug) || null;
   const activeSubs    = (activeCatObj?.subCategories || []).filter(s => s.isActive !== false);
   const hasActiveSubs = activeSubs.length > 0;
+
+  // Show chevron when: on a category page + it has subs + page sub-pills are scrolled away
   const showDropdownTrigger = !!activeCatSlug && hasActiveSubs && pillsAreHidden;
 
-  const handlePillClick = (slug) => {
-    const isActive = slug === activeCatSlug;
-    if (isActive && showDropdownTrigger) {
-      setOpenCatDropdown(p => p === slug ? null : slug);
+  /* ── Open dropdown: fetch sub-categories fresh from API by slug ── */
+  // This guarantees sub-categories always load regardless of timing issues
+  const openDropdown = useCallback(async (slug, name) => {
+    // If already open — close it
+    if (openCatDropdown === slug) {
+      setOpenCatDropdown(null);
+      setDropdownSubs([]);
+      setDropdownCatName("");
+      return;
+    }
+
+    // First: open dropdown immediately with subs from pre-loaded categories
+    // (instant feedback, no loading flash for most cases)
+    const preloaded = categories.find(c => c.slug === slug);
+    const preloadedSubs = (preloaded?.subCategories || []).filter(s => s.isActive !== false);
+
+    setOpenCatDropdown(slug);
+    setDropdownCatName(name);
+    setDropdownSubs(preloadedSubs);
+
+    // Second: fetch fresh from API by slug to guarantee latest data
+    try {
+      const { data } = await api.get(`/categories/${slug}`);
+      if (data?.subCategories) {
+        const freshSubs = data.subCategories.filter(s => s.isActive !== false);
+        setDropdownSubs(freshSubs);
+      }
+    } catch (e) {
+      // Silent fail — preloaded subs still show
+      console.error("Sub-category fetch error:", e);
+    }
+  }, [openCatDropdown, categories]);
+
+  /* ── Pill click ── */
+  const handlePillClick = (slug, name) => {
+    if (slug === activeCatSlug && showDropdownTrigger) {
+      openDropdown(slug, name);
     } else {
       goCategory(slug);
     }
@@ -168,8 +219,8 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
     <>
       <style>{`
         @keyframes navDropdown {
-          from { opacity: 0; transform: translateY(-8px) scale(0.97); }
-          to   { opacity: 1; transform: translateY(0)    scale(1);    }
+          from { opacity:0; transform:translateY(-8px) scale(0.97); }
+          to   { opacity:1; transform:translateY(0) scale(1); }
         }
         .nav-dropdown-enter { animation: navDropdown 0.18s cubic-bezier(.22,.68,0,1.2) both; }
       `}</style>
@@ -182,7 +233,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
 
         <div className="max-w-7xl mx-auto px-3 md:px-6">
 
-          {/* ── Main row ── */}
+          {/* Main row */}
           <div className="flex items-center gap-3 py-3">
 
             {/* Logo */}
@@ -207,7 +258,6 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                   </button>
                 )}
               </form>
-
               {searchResults?.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-2xl
                                 border border-gray-100 z-50 overflow-hidden max-h-80 overflow-y-auto">
@@ -220,9 +270,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                         onError={e => { e.currentTarget.style.display = "none"; }} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 truncate">{product.title}</p>
-                        <p className="text-xs text-gray-500">
-                          {product.category} · ₹{product.price?.toLocaleString("en-IN")}
-                        </p>
+                        <p className="text-xs text-gray-500">{product.category} · ₹{product.price?.toLocaleString("en-IN")}</p>
                       </div>
                       <Search className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
                     </button>
@@ -235,7 +283,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
               )}
             </div>
 
-            {/* ── Right icons ── */}
+            {/* Right icons */}
             <div className="flex items-center gap-0.5 md:gap-1 flex-shrink-0">
 
               {/* User menu */}
@@ -254,7 +302,6 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                     </div>
                     <ChevronDown className={`w-3.5 h-3.5 text-gray-500 hidden md:block transition-transform ${showUserMenu ? "rotate-180" : ""}`} />
                   </button>
-
                   {showUserMenu && (
                     <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
                       <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
@@ -321,7 +368,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                 )}
               </div>
 
-              {/* Notifications — all logged-in users */}
+              {/* Notifications */}
               {isLoggedIn && (
                 <div className="relative" ref={notifRef}>
                   <button onClick={() => setShowNotifPanel(s => !s)}
@@ -337,7 +384,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                 </div>
               )}
 
-              {/* Wishlist — customers only */}
+              {/* Wishlist */}
               {showCartWishlist && (
                 <button onClick={goWishlist} className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors group" title="Wishlist">
                   <Heart className="w-5 h-5 text-gray-600 group-hover:text-[#0a1f44] transition-colors" />
@@ -345,7 +392,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                 </button>
               )}
 
-              {/* Cart — customers only */}
+              {/* Cart */}
               {showCartWishlist && (
                 <button onClick={goCart} className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors group" title="Cart">
                   <ShoppingCart className="w-5 h-5 text-gray-600 group-hover:text-[#0a1f44] transition-colors" />
@@ -364,7 +411,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
           {/* ── Category pill bar ── */}
           <div className="pb-2.5">
             {catsLoading ? (
-              <div className="flex items-center justify-evenly gap-1 overflow-x-auto no-scrollbar">
+              <div className="flex items-center justify-evenly overflow-x-auto no-scrollbar">
                 {[...Array(8)].map((_, i) => (
                   <div key={i} className="h-7 rounded-full bg-gray-100 animate-pulse flex-shrink-0"
                     style={{ width: `${60 + (i % 3) * 18}px` }} />
@@ -372,11 +419,10 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
               </div>
             ) : (
               <div className="flex items-center justify-evenly overflow-x-auto no-scrollbar">
-                {[...categories, { name: "All Parts", slug: "__all__" }].map(({ name, slug, subCategories = [] }) => {
-                  const isAll    = slug === "__all__";
-                  const isActive = isAll ? !activeCatSlug : activeCatSlug === slug;
-                  const subs     = !isAll ? (subCategories || []).filter(s => s.isActive !== false) : [];
-                  const showChevron    = !isAll && isActive && showDropdownTrigger;
+                {[...categories, { name: "All Parts", slug: "__all__" }].map(({ name, slug }) => {
+                  const isAll         = slug === "__all__";
+                  const isActive      = isAll ? !activeCatSlug : activeCatSlug === slug;
+                  const showChevron   = !isAll && isActive && showDropdownTrigger;
                   const isDropdownOpen = openCatDropdown === slug;
 
                   return (
@@ -384,10 +430,9 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                       key={slug}
                       className="relative flex-shrink-0"
                       ref={el => { pillRefs.current[slug] = el; }}
-                      onClick={e => e.stopPropagation()}
                     >
                       <button
-                        onClick={() => isAll ? navigate("/products") : handlePillClick(slug)}
+                        onClick={() => isAll ? navigate("/products") : handlePillClick(slug, name)}
                         className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold
                           whitespace-nowrap border transition-all select-none
                           ${isActive
@@ -396,37 +441,66 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                       >
                         {name}
                         {showChevron && (
-                          <ChevronDown className={`w-3 h-3 ml-0.5 flex-shrink-0 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
+                          <ChevronDown className={`w-3 h-3 ml-0.5 flex-shrink-0 transition-transform duration-200
+                            ${isDropdownOpen ? "rotate-180" : ""}`} />
                         )}
                       </button>
 
-                      {isDropdownOpen && subs.length > 0 && (
+                      {/* ── Sub-category dropdown ──────────────────────────────
+                           dropdownSubs is fetched fresh from GET /api/categories/:slug
+                           when the pill is clicked — guarantees correct data always.
+                      ──────────────────────────────────────────────────────── */}
+                      {isDropdownOpen && (
                         <div className="nav-dropdown-enter absolute left-0 top-full mt-2 z-[60] bg-white
-                                        rounded-2xl shadow-2xl border border-gray-100 overflow-hidden min-w-[190px]">
-                          <div className="px-4 py-2 bg-[#0a1f44]">
-                            <p className="text-xs font-black text-white uppercase tracking-wider">{name}</p>
+                                        rounded-2xl shadow-2xl border border-gray-100 overflow-hidden min-w-[200px]">
+                          {/* Header */}
+                          <div className="px-4 py-2.5 bg-[#0a1f44]">
+                            <p className="text-xs font-black text-white uppercase tracking-wider">
+                              {dropdownCatName || name}
+                            </p>
                           </div>
-                          <button
-                            onClick={() => goCategory(slug)}
-                            className={`w-full text-left px-4 py-2.5 text-xs font-semibold transition-colors
-                              border-b border-gray-50 flex items-center gap-2.5
-                              ${!activeSubSlug ? "text-[#0a1f44] bg-blue-50" : "text-gray-600 hover:bg-gray-50 hover:text-[#0a1f44]"}`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${!activeSubSlug ? "bg-[#0a1f44]" : "bg-gray-300"}`} />
-                            All {name}
-                          </button>
-                          {subs.map(sub => (
-                            <button
-                              key={sub.slug}
-                              onClick={() => goSubCategory(slug, sub.slug)}
-                              className={`w-full text-left px-4 py-2.5 text-xs font-semibold transition-colors
-                                border-b border-gray-50 last:border-0 flex items-center gap-2.5
-                                ${activeSubSlug === sub.slug ? "text-[#0a1f44] bg-blue-50" : "text-gray-600 hover:bg-gray-50 hover:text-[#0a1f44]"}`}
-                            >
-                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${activeSubSlug === sub.slug ? "bg-[#0a1f44]" : "bg-gray-300"}`} />
-                              {sub.name}
-                            </button>
-                          ))}
+
+                          {dropdownSubs.length === 0 ? (
+                            /* Loading state */
+                            <div className="px-4 py-3 space-y-2">
+                              {[...Array(4)].map((_, i) => (
+                                <div key={i} className="h-3 bg-gray-100 rounded animate-pulse" />
+                              ))}
+                            </div>
+                          ) : (
+                            <>
+                              {/* All [Category] */}
+                              <button
+                                onClick={() => goCategory(slug)}
+                                className={`w-full text-left px-4 py-2.5 text-xs font-semibold transition-colors
+                                  border-b border-gray-100 flex items-center gap-2.5
+                                  ${!activeSubSlug
+                                    ? "text-[#0a1f44] bg-blue-50"
+                                    : "text-gray-600 hover:bg-gray-50 hover:text-[#0a1f44]"}`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0
+                                  ${!activeSubSlug ? "bg-[#0a1f44]" : "bg-gray-300"}`} />
+                                All {dropdownCatName || name}
+                              </button>
+
+                              {/* Sub-categories */}
+                              {dropdownSubs.map(sub => (
+                                <button
+                                  key={sub.slug}
+                                  onClick={() => goSubCategory(slug, sub.slug)}
+                                  className={`w-full text-left px-4 py-2.5 text-xs font-semibold transition-colors
+                                    border-b border-gray-100 last:border-0 flex items-center gap-2.5
+                                    ${activeSubSlug === sub.slug
+                                      ? "text-[#0a1f44] bg-blue-50"
+                                      : "text-gray-600 hover:bg-gray-50 hover:text-[#0a1f44]"}`}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0
+                                    ${activeSubSlug === sub.slug ? "bg-[#0a1f44]" : "bg-gray-300"}`} />
+                                  {sub.name}
+                                </button>
+                              ))}
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
@@ -463,7 +537,6 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
             </Link>
             <div className="border-t border-gray-100 my-2" />
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider py-1">Shop by Category</p>
-
             {catsLoading ? (
               <div className="space-y-2 py-2">
                 {[...Array(6)].map((_, i) => <div key={i} className="h-8 rounded-lg bg-gray-100 animate-pulse" />)}
