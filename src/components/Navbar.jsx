@@ -29,52 +29,45 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
   const [catsLoading,       setCatsLoading]        = useState(true);
   const [mobileExpandedCat, setMobileExpandedCat]  = useState(null);
   const [headerHeight,      setHeaderHeight]        = useState(0);
-  const [openCatDropdown,   setOpenCatDropdown]    = useState(null); // slug of open dropdown
+  const [openCatDropdown,   setOpenCatDropdown]    = useState(null);
 
   const searchRef   = useRef(null);
   const moreRef     = useRef(null);
   const userRef     = useRef(null);
   const notifRef    = useRef(null);
-  const searchTimer = useRef(null);
   const headerRef   = useRef(null);
-  // Map of slug → pill button DOM node, for positioning the dropdown
   const pillRefs    = useRef({});
+  const searchTimer = useRef(null);
 
   const isDealer = user?.role === "dealer";
   const isAdmin  = user?.role === "admin";
   const isUser   = user?.role === "user";
 
+  // Only regular customers see cart & wishlist
+  const showCartWishlist = isLoggedIn && isUser;
+
   const activeCatSlug = location.pathname.match(/\/products\/category\/([^/?]+)/)?.[1]?.toLowerCase() || null;
   const activeSubSlug = new URLSearchParams(location.search).get("sub") || null;
 
-  /* ── subPillsVisible: treat undefined/null as true (not yet observed) ── */
-  // The dropdown should only show when subPillsVisible is explicitly false
   const pillsAreHidden = subPillsVisible === false;
 
   /* ── Fetch categories ── */
- useEffect(() => {
-  const loadCategories = async () => {
-    try {
-      setCatsLoading(true);
-
-      const { data } = await api.get("/categories?nav=true");
-
-      if (Array.isArray(data)) {
-        setCategories(
-          [...data].sort(
-            (a, b) => (a.navOrder ?? 99) - (b.navOrder ?? 99)
-          )
-        );
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        setCatsLoading(true);
+        const { data } = await api.get("/categories?nav=true");
+        if (Array.isArray(data)) {
+          setCategories([...data].sort((a, b) => (a.navOrder ?? 99) - (b.navOrder ?? 99)));
+        }
+      } catch (error) {
+        console.error("Category fetch error:", error);
+      } finally {
+        setCatsLoading(false);
       }
-    } catch (error) {
-      console.error("Category fetch error:", error);
-    } finally {
-      setCatsLoading(false);
-    }
-  };
-
-  loadCategories();
-}, []);
+    };
+    loadCategories();
+  }, []);
 
   /* ── Measure header height ── */
   useEffect(() => {
@@ -110,8 +103,6 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
       if (userRef.current   && !userRef.current.contains(e.target))   setShowUserMenu(false);
       if (notifRef.current  && !notifRef.current.contains(e.target))  setShowNotifPanel(false);
       if (searchRef.current && !searchRef.current.contains(e.target)) clearSearch?.();
-      // Cat dropdown close-on-outside is handled by stopPropagation on the pill button,
-      // so any click that reaches the document means it was outside — just close it.
       setOpenCatDropdown(null);
     };
     document.addEventListener("click", h);
@@ -154,24 +145,19 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
     navigate(`/products/category/${catSlug}?sub=${subSlug}`);
   }, [navigate]);
 
-  const goCart     = () => isLoggedIn ? navigate("/cart")     : navigate("/login");
-  const goWishlist = () => isLoggedIn ? navigate("/wishlist") : navigate("/login");
+  const goCart     = () => navigate("/cart");
+  const goWishlist = () => navigate("/wishlist");
   const toggleMobileCat = (slug) => setMobileExpandedCat(p => p === slug ? null : slug);
 
   /* ── Derived ── */
   const activeCatObj  = categories.find(c => c.slug === activeCatSlug) || null;
   const activeSubs    = (activeCatObj?.subCategories || []).filter(s => s.isActive !== false);
   const hasActiveSubs = activeSubs.length > 0;
-
-  // The dropdown trigger is visible only when:
-  // 1. We're on a category page  2. That category has subs  3. Page pills are scrolled away
   const showDropdownTrigger = !!activeCatSlug && hasActiveSubs && pillsAreHidden;
 
-  /* ── Handle pill click ── */
   const handlePillClick = (slug) => {
     const isActive = slug === activeCatSlug;
     if (isActive && showDropdownTrigger) {
-      // Toggle the sub-category dropdown instead of navigating
       setOpenCatDropdown(p => p === slug ? null : slug);
     } else {
       goCategory(slug);
@@ -180,7 +166,6 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
 
   return (
     <>
-      {/* Dropdown animation keyframes injected once */}
       <style>{`
         @keyframes navDropdown {
           from { opacity: 0; transform: translateY(-8px) scale(0.97); }
@@ -336,7 +321,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                 )}
               </div>
 
-              {/* Notifications */}
+              {/* Notifications — all logged-in users */}
               {isLoggedIn && (
                 <div className="relative" ref={notifRef}>
                   <button onClick={() => setShowNotifPanel(s => !s)}
@@ -352,16 +337,16 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                 </div>
               )}
 
-              {/* Wishlist */}
-              {isUser && (
+              {/* Wishlist — customers only */}
+              {showCartWishlist && (
                 <button onClick={goWishlist} className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors group" title="Wishlist">
                   <Heart className="w-5 h-5 text-gray-600 group-hover:text-[#0a1f44] transition-colors" />
                   {wishlistCount > 0 && <span className="badge-count">{wishlistCount > 9 ? "9+" : wishlistCount}</span>}
                 </button>
               )}
 
-              {/* Cart */}
-              {isUser && (
+              {/* Cart — customers only */}
+              {showCartWishlist && (
                 <button onClick={goCart} className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors group" title="Cart">
                   <ShoppingCart className="w-5 h-5 text-gray-600 group-hover:text-[#0a1f44] transition-colors" />
                   {cartCount > 0 && <span className="badge-count">{cartCount > 9 ? "9+" : cartCount}</span>}
@@ -376,10 +361,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
             </div>
           </div>
 
-          {/* ── Category pill bar ──────────────────────────────────────────
-              Uses justify-evenly so pills are evenly spaced across the
-              full width instead of left-aligned with a fixed gap.
-          ──────────────────────────────────────────────────────────────── */}
+          {/* ── Category pill bar ── */}
           <div className="pb-2.5">
             {catsLoading ? (
               <div className="flex items-center justify-evenly gap-1 overflow-x-auto no-scrollbar">
@@ -394,10 +376,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                   const isAll    = slug === "__all__";
                   const isActive = isAll ? !activeCatSlug : activeCatSlug === slug;
                   const subs     = !isAll ? (subCategories || []).filter(s => s.isActive !== false) : [];
-
-                  // Show the dropdown chevron only when:
-                  // this is the active category AND it has subs AND the page sub-pills are hidden
-                  const showChevron   = !isAll && isActive && showDropdownTrigger;
+                  const showChevron    = !isAll && isActive && showDropdownTrigger;
                   const isDropdownOpen = openCatDropdown === slug;
 
                   return (
@@ -408,10 +387,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                       onClick={e => e.stopPropagation()}
                     >
                       <button
-                        onClick={() => isAll
-                          ? navigate("/products")
-                          : handlePillClick(slug)
-                        }
+                        onClick={() => isAll ? navigate("/products") : handlePillClick(slug)}
                         className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold
                           whitespace-nowrap border transition-all select-none
                           ${isActive
@@ -420,51 +396,34 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                       >
                         {name}
                         {showChevron && (
-                          <ChevronDown
-                            className={`w-3 h-3 ml-0.5 flex-shrink-0 transition-transform duration-200
-                              ${isDropdownOpen ? "rotate-180" : ""}`}
-                          />
+                          <ChevronDown className={`w-3 h-3 ml-0.5 flex-shrink-0 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
                         )}
                       </button>
 
-                      {/* ── Sub-category dropdown ── */}
                       {isDropdownOpen && subs.length > 0 && (
                         <div className="nav-dropdown-enter absolute left-0 top-full mt-2 z-[60] bg-white
                                         rounded-2xl shadow-2xl border border-gray-100 overflow-hidden min-w-[190px]">
-                          {/* Header */}
                           <div className="px-4 py-2 bg-[#0a1f44]">
                             <p className="text-xs font-black text-white uppercase tracking-wider">{name}</p>
                           </div>
-
-                          {/* All [Category] */}
                           <button
                             onClick={() => goCategory(slug)}
                             className={`w-full text-left px-4 py-2.5 text-xs font-semibold transition-colors
                               border-b border-gray-50 flex items-center gap-2.5
-                              ${!activeSubSlug
-                                ? "text-[#0a1f44] bg-blue-50"
-                                : "text-gray-600 hover:bg-gray-50 hover:text-[#0a1f44]"}`}
+                              ${!activeSubSlug ? "text-[#0a1f44] bg-blue-50" : "text-gray-600 hover:bg-gray-50 hover:text-[#0a1f44]"}`}
                           >
-                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0
-                              ${!activeSubSlug ? "bg-[#0a1f44]" : "bg-gray-300"}`}
-                            />
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${!activeSubSlug ? "bg-[#0a1f44]" : "bg-gray-300"}`} />
                             All {name}
                           </button>
-
-                          {/* Each sub */}
                           {subs.map(sub => (
                             <button
                               key={sub.slug}
                               onClick={() => goSubCategory(slug, sub.slug)}
                               className={`w-full text-left px-4 py-2.5 text-xs font-semibold transition-colors
                                 border-b border-gray-50 last:border-0 flex items-center gap-2.5
-                                ${activeSubSlug === sub.slug
-                                  ? "text-[#0a1f44] bg-blue-50"
-                                  : "text-gray-600 hover:bg-gray-50 hover:text-[#0a1f44]"}`}
+                                ${activeSubSlug === sub.slug ? "text-[#0a1f44] bg-blue-50" : "text-gray-600 hover:bg-gray-50 hover:text-[#0a1f44]"}`}
                             >
-                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0
-                                ${activeSubSlug === sub.slug ? "bg-[#0a1f44]" : "bg-gray-300"}`}
-                              />
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${activeSubSlug === sub.slug ? "bg-[#0a1f44]" : "bg-gray-300"}`} />
                               {sub.name}
                             </button>
                           ))}
@@ -537,9 +496,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                             key={sub.slug}
                             onClick={() => goSubCategory(slug, sub.slug)}
                             className={`w-full text-left text-sm py-2 flex items-center gap-2
-                              ${activeSubSlug === sub.slug
-                                ? "text-[#0a1f44] font-semibold"
-                                : "text-gray-500 hover:text-[#0a1f44]"}`}
+                              ${activeSubSlug === sub.slug ? "text-[#0a1f44] font-semibold" : "text-gray-500 hover:text-[#0a1f44]"}`}
                           >
                             <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
                             {sub.name}

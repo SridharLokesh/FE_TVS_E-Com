@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Mail, Lock, ArrowRight, User, Store, Shield } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Shield } from "lucide-react";
 import TVS_Logo from "../assets/TVS_logo_white.png";
 
 export default function LoginPage({ auth }) {
@@ -9,22 +9,11 @@ export default function LoginPage({ auth }) {
   const location = useLocation();
   const [params] = useSearchParams();
 
-  // Where to send the user after login (supports ?redirect=/checkout etc.)
   const from = params.get("redirect") || location.state?.from?.pathname || "/";
 
-  const [tab,       setTab]       = useState("login");
-  const [loginType, setLoginType] = useState(params.get("type") || "user");
-  const [form,      setForm]      = useState({ email: "", password: "" });
-  const [showPwd,   setShowPwd]   = useState(false);
-  const [errors,    setErrors]    = useState({});
-
-  // NOTE: no useEffect redirect here — handleSubmit is the single source of navigation.
-  // The GuestOnly wrapper in App.jsx already blocks logged-in users from reaching this page.
-
-  const handleTabSwitch = (newTab) => {
-    if (newTab === "register") navigate("/register");
-    else setTab("login");
-  };
+  const [form,    setForm]    = useState({ email: "", password: "" });
+  const [showPwd, setShowPwd] = useState(false);
+  const [errors,  setErrors]  = useState({});
 
   const handleChange = (key) => (e) => {
     let val = e.target.value;
@@ -49,29 +38,23 @@ export default function LoginPage({ auth }) {
     e.preventDefault();
     if (!validate()) return;
 
-    const result = await login(form.email, form.password, loginType);
-    if (!result) return; // login() already showed a toast on failure
+    // Pass loginType as null / "auto" — backend infers role from credentials
+    const result = await login(form.email, form.password);
+    if (!result) return;
 
-    // Single, clear redirect logic based on role
-    if (result.role === "admin")  navigate("/admin",  { replace: true });
+    if (result.role === "admin")       navigate("/admin",  { replace: true });
     else if (result.role === "dealer") navigate("/dealer", { replace: true });
     else navigate(from === "/login" ? "/" : from, { replace: true });
   };
 
-  const LOGIN_TYPE_TABS = [
-    { id: "user",   label: "Customer", icon: User  },
-    { id: "dealer", label: "Dealer",   icon: Store },
-  ];
-
-  const activeLoginType = LOGIN_TYPE_TABS.find((t) => t.id === loginType) || LOGIN_TYPE_TABS[0];
-
   return (
     <div
-      className="min-h-screen px-4 pt-8 pb-12
+      className="min-h-screen px-4 pt-6 pb-12
                  bg-gradient-to-br from-slate-900 via-[#0a1f44] to-slate-800
                  flex items-start justify-center"
     >
       <div className="w-full max-w-md">
+
         {/* Logo */}
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex flex-col items-center gap-3">
@@ -82,67 +65,33 @@ export default function LoginPage({ auth }) {
         {/* Login / Register top tabs */}
         <div className="flex rounded-xl overflow-hidden border border-white/20 mb-6">
           <button
-            onClick={() => handleTabSwitch("login")}
-            className={`flex-1 py-2.5 text-center text-sm font-bold transition-colors
-              ${tab === "login"
-                ? "bg-white text-[#0a1f44]"
-                : "text-white/60 hover:text-white hover:bg-white/10"}`}
+            className="flex-1 py-2.5 text-center text-sm font-bold bg-white text-[#0a1f44]"
           >
             Login
           </button>
-          <button
-            onClick={() => handleTabSwitch("register")}
+          <Link
+            to="/register"
             className="flex-1 py-2.5 text-center text-sm font-semibold
                        text-white/60 hover:text-white hover:bg-white/10 transition-colors"
           >
             Register
-          </button>
+          </Link>
         </div>
 
         {/* Form card */}
-        <div className="bg-white rounded-2xl shadow-2xl p-6">
-          <h2 className="text-lg font-extrabold text-gray-900 mb-1">
+        <div className="bg-white rounded-2xl shadow-2xl p-4">
+          <h2 className="text-base font-extrabold text-gray-900 mb-0.5">
             Sign in to your account
           </h2>
-          <p className="text-sm text-gray-500 mb-5">
+          <p className="text-xs text-gray-500 mb-4">
             Access genuine TVS parts and accessories
           </p>
 
-          {/* Customer / Dealer sub-tabs */}
-          <div className="flex gap-2 bg-gray-100 rounded-xl p-1.5 mb-5">
-            {LOGIN_TYPE_TABS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setLoginType(id)}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg
-                            text-sm font-bold transition-all
-                  ${loginType === id
-                    ? "bg-white shadow text-[#0a1f44]"
-                    : "text-gray-400 hover:text-gray-600"}`}
-              >
-                <Icon className="w-4 h-4" />
-                {label}
-              </button>
-            ))}
-          </div>
+          <form onSubmit={handleSubmit} noValidate className="space-y-3">
 
-          {/* Dealer hint */}
-          {loginType === "dealer" && (
-            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3
-                            text-xs text-[#0a1f44] mb-4 flex items-start gap-2">
-              <Store className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>
-                Use the email and password provided by TVS Admin when your
-                dealer account was approved.
-              </span>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             {/* Email */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
                 Email Address
               </label>
               <div className="relative">
@@ -166,7 +115,7 @@ export default function LoginPage({ auth }) {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
                 Password
               </label>
               <div className="relative">
@@ -201,7 +150,7 @@ export default function LoginPage({ auth }) {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary w-full py-2.5 text-base mt-2"
+              className="btn-primary w-full py-2 text-sm mt-1"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -211,10 +160,7 @@ export default function LoginPage({ auth }) {
                 </span>
               ) : (
                 <span className="flex items-center justify-center gap-2">
-                  {loginType === "dealer"
-                    ? <Store className="w-4 h-4" />
-                    : <User  className="w-4 h-4" />}
-                  Sign in as {activeLoginType.label}
+                  Sign In
                   <ArrowRight className="w-4 h-4" />
                 </span>
               )}
@@ -222,24 +168,40 @@ export default function LoginPage({ auth }) {
           </form>
 
           {/* Footer links */}
-          <div className="mt-5 text-center space-y-2">
-            {loginType === "user" && (
-              <p className="text-sm text-gray-500">
-                New to TVS Motors?{" "}
-                <Link to="/register" className="font-bold text-[#0a1f44] hover:underline">
-                  Create account
-                </Link>
-              </p>
-            )}
-            {loginType === "dealer" && (
-              <p className="text-sm text-gray-500">
-                Want to become a dealer?{" "}
-                <Link to="/become-dealer" className="font-bold text-[#0a1f44] hover:underline">
-                  Apply here
-                </Link>
-              </p>
-            )}
-            <p className="text-xs text-gray-400 flex items-center justify-center gap-1">
+          <div className="mt-4 space-y-2">
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400 font-medium">or</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+
+            {/* Customer sign up */}
+            <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2
+                            border border-gray-100">
+              <span className="text-xs text-gray-500">New customer?</span>
+              <Link
+                to="/register"
+                className="text-xs font-bold text-[#0a1f44] hover:underline"
+              >
+                Create account →
+              </Link>
+            </div>
+
+            {/* Dealer application */}
+            <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2
+                            border border-blue-100">
+              <span className="text-xs text-gray-500">Want to become a dealer?</span>
+              <Link
+                to="/become-dealer"
+                className="text-xs font-bold text-[#0a1f44] hover:underline"
+              >
+                Apply here →
+              </Link>
+            </div>
+
+            <p className="text-xs text-gray-400 flex items-center justify-center gap-1 pt-0.5">
               <Shield className="w-3 h-3" /> Secure 256-bit SSL encrypted login
             </p>
           </div>

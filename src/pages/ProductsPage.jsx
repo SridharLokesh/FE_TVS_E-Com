@@ -3,7 +3,7 @@ import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { ChevronDown, Search, SlidersHorizontal, ChevronRight } from "lucide-react";
 import ProductCard from "../components/ProductCard";
 import { useProducts } from "../hooks/useProducts";
-import api from "../utils/api";
+
 const SORT_OPTIONS = [
   { label: "Newest First",      value: "-createdAt" },
   { label: "Price: Low → High", value: "price"      },
@@ -43,26 +43,15 @@ export default function ProductsPage({ auth, cartHook, wishlistHook, onSubPillsV
 
   /* ── Fetch categories ── */
   useEffect(() => {
-  const loadCategories = async () => {
-    try {
-      const { data } = await api.get("/categories?nav=true");
-
-      if (Array.isArray(data)) {
-        setCategories(
-          [...data].sort(
-            (a, b) => (a.navOrder ?? 99) - (b.navOrder ?? 99)
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Category fetch error:", error);
-    } finally {
-      setCatsReady(true);
-    }
-  };
-
-  loadCategories();
-}, []);
+    fetch("/api/categories?nav=true")
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        if (Array.isArray(data))
+          setCategories([...data].sort((a, b) => (a.navOrder ?? 99) - (b.navOrder ?? 99)));
+      })
+      .catch(() => {})
+      .finally(() => setCatsReady(true));
+  }, []);
 
   /* ── Resolve active category ── */
   const activeCat  = cat ? categories.find(c => c.slug === cat.toLowerCase()) || null : null;
@@ -122,7 +111,16 @@ export default function ProductsPage({ auth, cartHook, wishlistHook, onSubPillsV
   useEffect(() => {
     if (!catsReady) return;
     const params = { sort, page, limit: 20 };
-    if (cat)      params.category = activeCat ? activeCat.name : cat;
+    if (cat) {
+      if (activeCat) {
+        params.category     = activeCat.name;
+        params.categorySlug = activeCat.slug;
+        params.categoryRaw  = cat;
+      } else {
+        params.category = cat;
+        params.categoryRaw = cat;
+      }
+    }
     if (subSlug && activeSubs.length > 0) {
       const subObj = activeSubs.find(s => s.slug === subSlug);
       if (subObj) params.sub = subObj.name;
