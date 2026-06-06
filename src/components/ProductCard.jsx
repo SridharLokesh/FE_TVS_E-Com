@@ -74,7 +74,8 @@ export default function ProductCard({ product, auth, cartHook, wishlistHook }) {
         {canShop && (
           <button
             onClick={handleWish}
-            className={`absolute top-2 right-2 w-8 h-8 rounded-full shadow-md
+            onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); if (!isLoggedIn) { navigate("/login"); return; } inWishlist ? removeFromWishlist?.(product._id) : addToWishlist?.(product._id); }}
+            className={`absolute top-2 right-2 w-8 h-8 rounded-full shadow-md z-10
                         flex items-center justify-center transition-all
                         ${inWishlist ? "bg-red-500 text-white" : "bg-white text-gray-400 hover:text-red-500"}`}
           >
@@ -125,8 +126,9 @@ export default function ProductCard({ product, auth, cartHook, wishlistHook }) {
         {canShop ? (
           <button
             onClick={handleCart}
+            onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); if (!isLoggedIn) { navigate("/login"); return; } if (product.stock === 0 || cartLoading) return; addToCart?.(product._id, 1, product.color); }}
             disabled={product.stock === 0 || cartLoading}
-            className="w-full flex items-center justify-center gap-1.5
+            className="w-full flex items-center justify-center gap-1.5 relative z-10
                        bg-[#0a1f44] hover:bg-[#0d2657]
                        disabled:bg-gray-200 disabled:cursor-not-allowed
                        text-white disabled:text-gray-400
@@ -139,7 +141,7 @@ export default function ProductCard({ product, auth, cartHook, wishlistHook }) {
         ) : (
           <button
             onClick={goDetail}
-            className="w-full flex items-center justify-center gap-1.5
+            className="w-full flex items-center justify-center gap-1.5 relative z-10
                        border-2 border-gray-200 text-gray-500
                        text-xs font-semibold py-2 rounded-xl
                        transition-colors hover:border-[#0a1f44] hover:text-[#0a1f44]"

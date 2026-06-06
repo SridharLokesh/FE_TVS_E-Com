@@ -16,31 +16,34 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
   const wishlistCount = wishlistHook?.wishlistCount ?? 0;
   const { notifications = [], unreadCount = 0, markRead, markAllRead, deleteNotif } = notifHook || {};
 
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate  = useNavigate();
+  const location  = useLocation();
   const { searchResults, searchProducts, clearSearch } = useProducts();
 
-  const [searchQuery,       setSearchQuery]       = useState("");
-  const [showMoreMenu,      setShowMoreMenu]       = useState(false);
-  const [showUserMenu,      setShowUserMenu]       = useState(false);
-  const [showNotifPanel,    setShowNotifPanel]     = useState(false);
-  const [mobileMenuOpen,    setMobileMenuOpen]     = useState(false);
-  const [categories,        setCategories]         = useState([]);
-  const [catsLoading,       setCatsLoading]        = useState(true);
-  const [mobileExpandedCat, setMobileExpandedCat]  = useState(null);
-  const [headerHeight,      setHeaderHeight]        = useState(0);
-  const [openCatDropdown,   setOpenCatDropdown]    = useState(null);
-  // Holds sub-categories for the currently open dropdown — fetched fresh when opened
-  const [dropdownSubs,      setDropdownSubs]       = useState([]);
-  const [dropdownCatName,   setDropdownCatName]    = useState("");
+  const [searchQuery,       setSearchQuery]    = useState("");
+  const [showMoreMenu,      setShowMoreMenu]   = useState(false);
+  const [showUserMenu,      setShowUserMenu]   = useState(false);
+  const [showNotifPanel,    setShowNotifPanel] = useState(false);
+  const [mobileMenuOpen,    setMobileMenuOpen] = useState(false);
+  const [mobileSearchOpen,  setMobileSearchOpen] = useState(false);
+  const [categories,        setCategories]     = useState([]);
+  const [catsLoading,       setCatsLoading]    = useState(true);
+  const [mobileExpandedCat, setMobileExpandedCat] = useState(null);
+  const [headerHeight,      setHeaderHeight]   = useState(0);
 
-  const searchRef   = useRef(null);
-  const moreRef     = useRef(null);
-  const userRef     = useRef(null);
-  const notifRef    = useRef(null);
-  const headerRef   = useRef(null);
-  const pillRefs    = useRef({});
-  const searchTimer = useRef(null);
+  const [openCatDropdown, setOpenCatDropdown] = useState(null);
+  const [dropdownSubs,    setDropdownSubs]    = useState([]);
+  const [dropdownName,    setDropdownName]    = useState("");
+  const [dropdownLoading, setDropdownLoading] = useState(false);
+
+  const searchRef       = useRef(null);
+  const mobileSearchRef = useRef(null);
+  const moreRef         = useRef(null);
+  const userRef         = useRef(null);
+  const notifRef        = useRef(null);
+  const headerRef       = useRef(null);
+  const pillRefs        = useRef({});
+  const searchTimer     = useRef(null);
 
   const isDealer = user?.role === "dealer";
   const isAdmin  = user?.role === "admin";
@@ -49,11 +52,9 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
 
   const activeCatSlug = location.pathname.match(/\/products\/category\/([^/?]+)/)?.[1]?.toLowerCase() || null;
   const activeSubSlug = new URLSearchParams(location.search).get("sub") || null;
-
-  // pillsAreHidden = true only when ProductsPage explicitly reports false
   const pillsAreHidden = subPillsVisible === false;
 
-  /* ── Fetch all nav categories ── */
+  /* ── Fetch nav categories on mount ── */
   useEffect(() => {
     const load = async () => {
       try {
@@ -72,56 +73,53 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
 
   /* ── Measure header height ── */
   useEffect(() => {
-    const measure = () => { if (headerRef.current) setHeaderHeight(headerRef.current.offsetHeight); };
+    const measure = () => {
+      if (headerRef.current) setHeaderHeight(headerRef.current.offsetHeight);
+    };
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
 
-  /* ── Close dropdown when sub-pills come back into view ── */
-  useEffect(() => {
-    if (!pillsAreHidden) {
-      setOpenCatDropdown(null);
-      setDropdownSubs([]);
-      setDropdownCatName("");
-    }
-  }, [pillsAreHidden]);
-
-  /* ── Close menus on pathname change only ── */
+  /* ── Close everything on route change ── */
   useEffect(() => {
     setShowMoreMenu(false);
     setShowUserMenu(false);
     setMobileMenuOpen(false);
+    setMobileSearchOpen(false);
     setShowNotifPanel(false);
     setSearchQuery("");
     setMobileExpandedCat(null);
     setOpenCatDropdown(null);
     setDropdownSubs([]);
-    setDropdownCatName("");
+    setDropdownName("");
     clearSearch?.();
   }, [location.pathname]);
 
-  /* ── Click-outside (capture phase) ── */
+  /* ── Click-outside handler ── */
   useEffect(() => {
     const h = (e) => {
       if (moreRef.current  && !moreRef.current.contains(e.target))  setShowMoreMenu(false);
       if (userRef.current  && !userRef.current.contains(e.target))  setShowUserMenu(false);
       if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotifPanel(false);
       if (searchRef.current && !searchRef.current.contains(e.target)) clearSearch?.();
+      if (mobileSearchRef.current && !mobileSearchRef.current.contains(e.target)) {
+        if (!searchQuery) setMobileSearchOpen(false);
+      }
       if (openCatDropdown) {
-        const pillEl = pillRefs.current[openCatDropdown];
-        if (pillEl && !pillEl.contains(e.target)) {
+        const el = pillRefs.current[openCatDropdown];
+        if (el && !el.contains(e.target)) {
           setOpenCatDropdown(null);
           setDropdownSubs([]);
-          setDropdownCatName("");
+          setDropdownName("");
         }
       }
     };
-    document.addEventListener("click", h, true);
-    return () => document.removeEventListener("click", h, true);
-  }, [openCatDropdown]);
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [openCatDropdown, searchQuery]);
 
-  /* ── Search ── */
+  /* ── Search handlers ── */
   const handleSearchChange = useCallback((e) => {
     const val = e.target.value;
     setSearchQuery(val);
@@ -130,9 +128,10 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
     else clearSearch?.();
   }, [searchProducts, clearSearch]);
 
-  const handleSearchSelect = (product) => {
-    navigate(`/products/${product._id}`);
+  const handleSearchSelect = (p) => {
+    navigate(`/products/${p._id}`);
     setSearchQuery(""); clearSearch?.();
+    setMobileSearchOpen(false);
   };
 
   const handleSearchSubmit = (e) => {
@@ -140,23 +139,26 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
     if (searchQuery.trim()) {
       navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
       clearSearch?.();
+      setMobileSearchOpen(false);
     }
   };
 
   /* ── Navigation ── */
-  const goCategory = useCallback((slug) => {
-    setMobileMenuOpen(false);
+  const closeDropdown = () => {
     setOpenCatDropdown(null);
     setDropdownSubs([]);
-    setDropdownCatName("");
+    setDropdownName("");
+  };
+
+  const goCategory = useCallback((slug) => {
+    setMobileMenuOpen(false);
+    closeDropdown();
     navigate(`/products/category/${slug}`);
   }, [navigate]);
 
   const goSubCategory = useCallback((catSlug, subSlug) => {
     setMobileMenuOpen(false);
-    setOpenCatDropdown(null);
-    setDropdownSubs([]);
-    setDropdownCatName("");
+    closeDropdown();
     navigate(`/products/category/${catSlug}?sub=${subSlug}`);
   }, [navigate]);
 
@@ -164,52 +166,27 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
   const goWishlist = () => navigate("/wishlist");
   const toggleMobileCat = (slug) => setMobileExpandedCat(p => p === slug ? null : slug);
 
-  /* ── Derived ── */
-  // activeSubs from the pre-loaded categories list (used for showDropdownTrigger check)
-  const activeCatObj  = categories.find(c => c.slug === activeCatSlug) || null;
-  const activeSubs    = (activeCatObj?.subCategories || []).filter(s => s.isActive !== false);
-  const hasActiveSubs = activeSubs.length > 0;
-
-  // Show chevron when: on a category page + it has subs + page sub-pills are scrolled away
-  const showDropdownTrigger = !!activeCatSlug && hasActiveSubs && pillsAreHidden;
-
-  /* ── Open dropdown: fetch sub-categories fresh from API by slug ── */
-  // This guarantees sub-categories always load regardless of timing issues
-  const openDropdown = useCallback(async (slug, name) => {
-    // If already open — close it
-    if (openCatDropdown === slug) {
-      setOpenCatDropdown(null);
-      setDropdownSubs([]);
-      setDropdownCatName("");
-      return;
-    }
-
-    // First: open dropdown immediately with subs from pre-loaded categories
-    // (instant feedback, no loading flash for most cases)
-    const preloaded = categories.find(c => c.slug === slug);
-    const preloadedSubs = (preloaded?.subCategories || []).filter(s => s.isActive !== false);
-
+  const openSubDropdown = useCallback(async (slug, name) => {
+    if (openCatDropdown === slug) { closeDropdown(); return; }
     setOpenCatDropdown(slug);
-    setDropdownCatName(name);
-    setDropdownSubs(preloadedSubs);
-
-    // Second: fetch fresh from API by slug to guarantee latest data
+    setDropdownName(name);
+    setDropdownSubs([]);
+    setDropdownLoading(true);
     try {
       const { data } = await api.get(`/categories/${slug}`);
-      if (data?.subCategories) {
-        const freshSubs = data.subCategories.filter(s => s.isActive !== false);
-        setDropdownSubs(freshSubs);
-      }
+      const subs = (data?.subCategories || []).filter(s => s.isActive !== false);
+      setDropdownSubs(subs);
     } catch (e) {
-      // Silent fail — preloaded subs still show
-      console.error("Sub-category fetch error:", e);
+      console.error("Failed to load sub-categories:", e);
+      setDropdownSubs([]);
+    } finally {
+      setDropdownLoading(false);
     }
-  }, [openCatDropdown, categories]);
+  }, [openCatDropdown]);
 
-  /* ── Pill click ── */
   const handlePillClick = (slug, name) => {
-    if (slug === activeCatSlug && showDropdownTrigger) {
-      openDropdown(slug, name);
+    if (slug === activeCatSlug && pillsAreHidden) {
+      openSubDropdown(slug, name);
     } else {
       goCategory(slug);
     }
@@ -219,41 +196,179 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
     <>
       <style>{`
         @keyframes navDropdown {
-          from { opacity:0; transform:translateY(-8px) scale(0.97); }
-          to   { opacity:1; transform:translateY(0) scale(1); }
+          from { opacity:0; transform:translateY(-6px); }
+          to   { opacity:1; transform:translateY(0); }
         }
-        .nav-dropdown-enter { animation: navDropdown 0.18s cubic-bezier(.22,.68,0,1.2) both; }
+        .nav-dd { animation: navDropdown 0.15s ease both; }
+        @keyframes slideDown {
+          from { opacity:0; transform:translateY(-8px); }
+          to   { opacity:1; transform:translateY(0); }
+        }
+        .mobile-search-animate { animation: slideDown 0.18s ease both; }
       `}</style>
 
       <header ref={headerRef} className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
-        {/* Promo strip */}
+        {/* Promo strip — hidden on mobile to save space */}
         <div className="bg-[#de1c0e] text-white py-1.5 px-4 text-center text-xs font-medium hidden md:block">
           Genuine TVS Parts &amp; Accessories — Free shipping above ₹999 — 1 Year Warranty on all parts
         </div>
 
-        <div className="max-w-7xl mx-auto px-3 md:px-6">
+        <div className="max-w-screen-2xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
 
-          {/* Main row */}
-          <div className="flex items-center gap-3 py-3">
+          {/* ══════════════════════════════════════════════════════
+              MOBILE SEARCH BAR — slides down when search icon tapped
+              Grows at 375px and 425px via Tailwind arbitrary media queries
+              Only on screens < sm (< 640px)
+          ══════════════════════════════════════════════════════ */}
+          {mobileSearchOpen && (
+            <div ref={mobileSearchRef} className="mobile-search-animate sm:hidden py-2 border-b border-gray-100">
+              <form onSubmit={handleSearchSubmit} className="relative flex items-center gap-2">
+                <div className="relative flex-1">
+
+                  {/* Search icon: 16px default → 20px at 375px+ */}
+                  <Search className="
+                    absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 transition-all
+                    w-4 h-4
+                    [@media(min-width:375px)]:w-5 [@media(min-width:375px)]:h-5 [@media(min-width:375px)]:left-3.5
+                  " />
+
+                  {/* Input:
+                      default  → text-sm,  py-2.5, pl-9,  pr-9,  rounded-xl
+                      375px+   → text-base, py-3,   pl-11, pr-11, rounded-2xl
+                      425px+   → py-3.5 (taller still)
+                  */}
+                  <input
+                    autoFocus
+                    type="text"
+                    value={searchQuery}
+                    onChange={handleSearchChange}
+                    placeholder="Search parts, accessories…"
+                    className="
+                      w-full border-2 border-gray-200 bg-gray-50 transition-all
+                      focus:outline-none focus:border-[#0a1f44]
+                      text-sm  py-2.5  pl-9  pr-9  rounded-xl
+                      [@media(min-width:375px)]:text-base [@media(min-width:375px)]:py-3 [@media(min-width:375px)]:pl-11 [@media(min-width:375px)]:pr-11 [@media(min-width:375px)]:rounded-2xl
+                      [@media(min-width:425px)]:py-3.5
+                    "
+                  />
+
+                  {/* Clear button */}
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => { setSearchQuery(""); clearSearch?.(); }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4 [@media(min-width:375px)]:w-5 [@media(min-width:375px)]:h-5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Cancel: text-sm px-1 default → text-base px-2 at 375px+ */}
+                <button
+                  type="button"
+                  onClick={() => { setMobileSearchOpen(false); setSearchQuery(""); clearSearch?.(); }}
+                  className="
+                    text-gray-500 py-2 font-medium flex-shrink-0
+                    text-sm  px-1
+                    [@media(min-width:375px)]:text-base [@media(min-width:375px)]:px-2
+                  "
+                >
+                  Cancel
+                </button>
+              </form>
+
+              {/* Search results: card grows at 375px+ */}
+              {searchResults?.length > 0 && (
+                <div className="
+                  mt-1 bg-white shadow-2xl border border-gray-100 z-50 overflow-hidden overflow-y-auto
+                  rounded-xl  max-h-64
+                  [@media(min-width:375px)]:rounded-2xl [@media(min-width:375px)]:max-h-72
+                ">
+                  {searchResults.map(product => (
+                    <button
+                      key={product._id}
+                      onClick={() => handleSearchSelect(product)}
+                      className="
+                        w-full flex items-center gap-3 px-4 text-left
+                        hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0
+                        py-3
+                        [@media(min-width:375px)]:py-3.5
+                      "
+                    >
+                      {/* Product image: 36px default → 44px at 375px+ */}
+                      <img
+                        src={product.image}
+                        alt={product.title}
+                        className="
+                          object-cover flex-shrink-0 bg-gray-100
+                          w-9 h-9 rounded-lg
+                          [@media(min-width:375px)]:w-11 [@media(min-width:375px)]:h-11 [@media(min-width:375px)]:rounded-xl
+                        "
+                        onError={e => { e.currentTarget.style.display = "none"; }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        {/* Product name: text-sm → text-base at 375px+ */}
+                        <p className="
+                          font-semibold text-gray-800 truncate
+                          text-sm
+                          [@media(min-width:375px)]:text-base
+                        ">
+                          {product.title}
+                        </p>
+                        {/* Meta: text-xs → text-sm at 375px+ */}
+                        <p className="
+                          text-gray-500
+                          text-xs
+                          [@media(min-width:375px)]:text-sm
+                        ">
+                          {product.category} · ₹{product.price?.toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                  {/* "See all" footer: text-sm py-2.5 → text-base py-3 at 375px+ */}
+                  <button
+                    onClick={handleSearchSubmit}
+                    className="
+                      w-full px-4 text-[#0a1f44] font-semibold hover:bg-blue-50 text-center transition-colors
+                      text-sm  py-2.5
+                      [@media(min-width:375px)]:text-base [@media(min-width:375px)]:py-3
+                    "
+                  >
+                    See all results for "{searchQuery}" →
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Main row ── */}
+          <div className="flex items-center gap-2 py-2.5 sm:py-3">
 
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
-              <img src={TVS_logo} alt="TVS Motors" className="h-10 w-auto object-contain" />
+            <Link to="/" className="flex items-center gap-2 flex-shrink-0">
+              <img src={TVS_logo} alt="TVS Motors" className="h-9 sm:h-10 w-auto object-contain" />
             </Link>
 
-            {/* Search */}
-            <div className="flex-1 relative" ref={searchRef}>
-              <form onSubmit={handleSearchSubmit} className="relative">
+            {/* ── DESKTOP SEARCH (sm and up) ── */}
+            <div className="hidden sm:flex flex-1 relative" ref={searchRef}>
+              <form onSubmit={handleSearchSubmit} className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 <input
-                  type="text" value={searchQuery} onChange={handleSearchChange}
+                  type="text"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
                   placeholder="Search parts, accessories, bike model…"
                   className="w-full pl-9 pr-9 py-2.5 border-2 border-gray-200 rounded-xl text-sm
                              focus:outline-none focus:border-[#0a1f44] bg-gray-50 transition-all"
                 />
                 {searchQuery && (
-                  <button type="button" onClick={() => { setSearchQuery(""); clearSearch?.(); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <button
+                    type="button"
+                    onClick={() => { setSearchQuery(""); clearSearch?.(); }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 )}
@@ -261,13 +376,19 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
               {searchResults?.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-2xl
                                 border border-gray-100 z-50 overflow-hidden max-h-80 overflow-y-auto">
-                  {searchResults.map((product) => (
-                    <button key={product._id} onClick={() => handleSearchSelect(product)}
+                  {searchResults.map(product => (
+                    <button
+                      key={product._id}
+                      onClick={() => handleSearchSelect(product)}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors
-                                 text-left border-b border-gray-50 last:border-0">
-                      <img src={product.image} alt={product.title}
+                                 text-left border-b border-gray-50 last:border-0"
+                    >
+                      <img
+                        src={product.image}
+                        alt={product.title}
                         className="w-10 h-10 object-cover rounded-lg flex-shrink-0 bg-gray-100"
-                        onError={e => { e.currentTarget.style.display = "none"; }} />
+                        onError={e => { e.currentTarget.style.display = "none"; }}
+                      />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 truncate">{product.title}</p>
                         <p className="text-xs text-gray-500">{product.category} · ₹{product.price?.toLocaleString("en-IN")}</p>
@@ -275,23 +396,37 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                       <Search className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
                     </button>
                   ))}
-                  <button onClick={handleSearchSubmit}
-                    className="w-full px-4 py-2.5 text-[#0a1f44] text-sm font-semibold hover:bg-blue-50 text-center transition-colors">
+                  <button
+                    onClick={handleSearchSubmit}
+                    className="w-full px-4 py-2.5 text-[#0a1f44] text-sm font-semibold hover:bg-blue-50 text-center transition-colors"
+                  >
                     See all results for "{searchQuery}" →
                   </button>
                 </div>
               )}
             </div>
 
-            {/* Right icons */}
-            <div className="flex items-center gap-0.5 md:gap-1 flex-shrink-0">
+            {/* ── Right icons ── */}
+            <div className="flex items-center gap-0.5 flex-shrink-0">
 
-              {/* User menu */}
+              {/* ══ MOBILE ONLY icons (< sm = < 640px) ══ */}
+
+              {/* Mobile: Search icon */}
+              <button
+                onClick={() => { setMobileSearchOpen(s => !s); setMobileMenuOpen(false); }}
+                className="sm:hidden p-2 rounded-xl hover:bg-gray-100 transition-colors relative"
+              >
+                <Search className="w-5 h-5 text-gray-600" />
+              </button>
+
+              {/* Profile — always visible on all screens */}
               {isLoggedIn ? (
                 <div className="relative" ref={userRef}>
-                  <button onClick={() => setShowUserMenu(s => !s)}
-                    className="flex items-center gap-1.5 px-2 md:px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors">
-                    <div className="w-7 h-7 bg-[#de1c0e] rounded-full flex items-center justify-center text-white text-xs font-bold">
+                  <button
+                    onClick={() => setShowUserMenu(s => !s)}
+                    className="flex items-center gap-1.5 px-1.5 sm:px-2 md:px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="w-7 h-7 bg-[#de1c0e] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                       {user?.name?.[0]?.toUpperCase() ?? "U"}
                     </div>
                     <div className="hidden lg:block text-left">
@@ -342,16 +477,23 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                   )}
                 </div>
               ) : (
-                <Link to="/login" className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-colors"
-                  style={{ backgroundColor: "#0a1f44" }}>
+                <Link
+                  to="/login"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold text-white transition-colors"
+                  style={{ backgroundColor: "#0a1f44" }}
+                >
                   <User className="w-4 h-4" /><span className="hidden sm:block">Login</span>
                 </Link>
               )}
 
-              {/* More */}
-              <div className="relative hidden md:block" ref={moreRef}>
-                <button onClick={() => setShowMoreMenu(s => !s)}
-                  className="flex items-center gap-1 px-2 py-2 rounded-xl hover:bg-gray-100 transition-colors text-sm text-gray-600 font-medium">
+              {/* ── DESKTOP-ONLY icons (sm and up) ── */}
+
+              {/* More dropdown — desktop */}
+              <div className="relative hidden sm:block" ref={moreRef}>
+                <button
+                  onClick={() => setShowMoreMenu(s => !s)}
+                  className="flex items-center gap-1 px-2 py-2 rounded-xl hover:bg-gray-100 transition-colors text-sm text-gray-600 font-medium"
+                >
                   More <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMoreMenu ? "rotate-180" : ""}`} />
                 </button>
                 {showMoreMenu && (
@@ -368,42 +510,66 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                 )}
               </div>
 
-              {/* Notifications */}
+              {/* Notification bell — desktop */}
               {isLoggedIn && (
-                <div className="relative" ref={notifRef}>
-                  <button onClick={() => setShowNotifPanel(s => !s)}
-                    className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors">
+                <div className="relative hidden sm:block" ref={notifRef}>
+                  <button
+                    onClick={() => setShowNotifPanel(s => !s)}
+                    className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors"
+                  >
                     <Bell className="w-5 h-5 text-gray-600" />
                     {unreadCount > 0 && <span className="badge-count">{unreadCount > 9 ? "9+" : unreadCount}</span>}
                   </button>
                   {showNotifPanel && (
-                    <NotificationPanel notifications={notifications} unreadCount={unreadCount}
-                      markRead={markRead} markAllRead={markAllRead} deleteNotif={deleteNotif}
-                      onClose={() => setShowNotifPanel(false)} />
+                    <NotificationPanel
+                      notifications={notifications}
+                      unreadCount={unreadCount}
+                      markRead={markRead}
+                      markAllRead={markAllRead}
+                      deleteNotif={deleteNotif}
+                      onClose={() => setShowNotifPanel(false)}
+                    />
                   )}
                 </div>
               )}
 
-              {/* Wishlist */}
+              {/* Wishlist — desktop */}
               {showCartWishlist && (
-                <button onClick={goWishlist} className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors group" title="Wishlist">
+                <button
+                  onClick={goWishlist}
+                  className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors group hidden sm:flex"
+                  title="Wishlist"
+                >
                   <Heart className="w-5 h-5 text-gray-600 group-hover:text-[#0a1f44] transition-colors" />
                   {wishlistCount > 0 && <span className="badge-count">{wishlistCount > 9 ? "9+" : wishlistCount}</span>}
                 </button>
               )}
 
-              {/* Cart */}
+              {/* Cart — desktop */}
               {showCartWishlist && (
-                <button onClick={goCart} className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors group" title="Cart">
+                <button
+                  onClick={goCart}
+                  className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors group hidden sm:flex"
+                  title="Cart"
+                >
                   <ShoppingCart className="w-5 h-5 text-gray-600 group-hover:text-[#0a1f44] transition-colors" />
                   {cartCount > 0 && <span className="badge-count">{cartCount > 9 ? "9+" : cartCount}</span>}
                 </button>
               )}
 
-              {/* Mobile hamburger */}
-              <button onClick={() => setMobileMenuOpen(s => !s)}
-                className="md:hidden p-2 rounded-xl hover:bg-gray-100 transition-colors">
+              {/* ── MOBILE hamburger (< sm) ── */}
+              <button
+                onClick={() => { setMobileMenuOpen(s => !s); setMobileSearchOpen(false); }}
+                className="sm:hidden p-2 rounded-xl hover:bg-gray-100 transition-colors relative"
+              >
                 <Menu className="w-5 h-5 text-gray-600" />
+                {/* Badge on hamburger = total of cart+wishlist+notif */}
+                {(cartCount + wishlistCount + unreadCount) > 0 && (
+                  <span className="badge-count">
+                    {Math.min((cartCount + wishlistCount + unreadCount), 9)}
+                    {(cartCount + wishlistCount + unreadCount) > 9 ? "+" : ""}
+                  </span>
+                )}
               </button>
             </div>
           </div>
@@ -413,16 +579,19 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
             {catsLoading ? (
               <div className="flex items-center justify-evenly overflow-x-auto no-scrollbar">
                 {[...Array(8)].map((_, i) => (
-                  <div key={i} className="h-7 rounded-full bg-gray-100 animate-pulse flex-shrink-0"
-                    style={{ width: `${60 + (i % 3) * 18}px` }} />
+                  <div
+                    key={i}
+                    className="h-7 rounded-full bg-gray-100 animate-pulse flex-shrink-0"
+                    style={{ width: `${60 + (i % 3) * 18}px` }}
+                  />
                 ))}
               </div>
             ) : (
               <div className="flex items-center justify-evenly overflow-x-auto no-scrollbar">
                 {[...categories, { name: "All Parts", slug: "__all__" }].map(({ name, slug }) => {
-                  const isAll         = slug === "__all__";
-                  const isActive      = isAll ? !activeCatSlug : activeCatSlug === slug;
-                  const showChevron   = !isAll && isActive && showDropdownTrigger;
+                  const isAll          = slug === "__all__";
+                  const isActive       = isAll ? !activeCatSlug : activeCatSlug === slug;
+                  const showChevron    = !isAll && isActive && pillsAreHidden;
                   const isDropdownOpen = openCatDropdown === slug;
 
                   return (
@@ -446,30 +615,29 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                         )}
                       </button>
 
-                      {/* ── Sub-category dropdown ──────────────────────────────
-                           dropdownSubs is fetched fresh from GET /api/categories/:slug
-                           when the pill is clicked — guarantees correct data always.
-                      ──────────────────────────────────────────────────────── */}
                       {isDropdownOpen && (
-                        <div className="nav-dropdown-enter absolute left-0 top-full mt-2 z-[60] bg-white
-                                        rounded-2xl shadow-2xl border border-gray-100 overflow-hidden min-w-[200px]">
-                          {/* Header */}
-                          <div className="px-4 py-2.5 bg-[#0a1f44]">
-                            <p className="text-xs font-black text-white uppercase tracking-wider">
-                              {dropdownCatName || name}
-                            </p>
+                        <div className="nav-dd absolute left-0 top-full mt-2 z-[60] bg-white
+                                        rounded-2xl shadow-2xl border border-gray-100 overflow-hidden min-w-[210px]">
+                          <div className="px-4 py-2.5 bg-[#0a1f44] flex items-center justify-between">
+                            <p className="text-xs font-black text-white uppercase tracking-wider">{dropdownName}</p>
+                            {dropdownLoading && (
+                              <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                            )}
                           </div>
-
-                          {dropdownSubs.length === 0 ? (
-                            /* Loading state */
-                            <div className="px-4 py-3 space-y-2">
-                              {[...Array(4)].map((_, i) => (
-                                <div key={i} className="h-3 bg-gray-100 rounded animate-pulse" />
+                          {dropdownLoading && dropdownSubs.length === 0 ? (
+                            <div className="p-3 space-y-2">
+                              {[...Array(5)].map((_, i) => (
+                                <div
+                                  key={i}
+                                  className="h-3 bg-gray-100 rounded-full animate-pulse"
+                                  style={{ width: `${65 + (i % 3) * 15}%` }}
+                                />
                               ))}
                             </div>
+                          ) : dropdownSubs.length === 0 ? (
+                            <p className="px-4 py-3 text-xs text-gray-400">No sub-categories found</p>
                           ) : (
-                            <>
-                              {/* All [Category] */}
+                            <div className="max-h-72 overflow-y-auto">
                               <button
                                 onClick={() => goCategory(slug)}
                                 className={`w-full text-left px-4 py-2.5 text-xs font-semibold transition-colors
@@ -478,12 +646,9 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                                     ? "text-[#0a1f44] bg-blue-50"
                                     : "text-gray-600 hover:bg-gray-50 hover:text-[#0a1f44]"}`}
                               >
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0
-                                  ${!activeSubSlug ? "bg-[#0a1f44]" : "bg-gray-300"}`} />
-                                All {dropdownCatName || name}
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${!activeSubSlug ? "bg-[#0a1f44]" : "bg-gray-300"}`} />
+                                All {dropdownName}
                               </button>
-
-                              {/* Sub-categories */}
                               {dropdownSubs.map(sub => (
                                 <button
                                   key={sub.slug}
@@ -499,7 +664,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                                   {sub.name}
                                 </button>
                               ))}
-                            </>
+                            </div>
                           )}
                         </div>
                       )}
@@ -512,34 +677,121 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
         </div>
       </header>
 
-      {/* ── Mobile menu ── */}
+      {/* ══════════════════════════════════════════════════════
+          MOBILE DRAWER MENU (< sm = < 640px)
+          Contains: Cart, Wishlist, Notifications, More, Become Dealer
+      ══════════════════════════════════════════════════════ */}
       {mobileMenuOpen && (
         <div
-          className="md:hidden fixed left-0 right-0 bottom-0 z-40 bg-white border-t border-gray-100 shadow-xl overflow-y-auto"
+          className="sm:hidden fixed left-0 right-0 bottom-0 z-40 bg-white border-t border-gray-100 shadow-xl overflow-y-auto"
           style={{ top: headerHeight > 0 ? `${headerHeight}px` : "57px" }}
         >
           <div className="px-4 py-3 space-y-0.5">
+
+            {/* ── Quick action row: Cart + Wishlist + Notifications ── */}
+            {isLoggedIn && (
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {showCartWishlist && (
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); goCart(); }}
+                    className="flex flex-col items-center gap-1 py-3 rounded-xl bg-gray-50 hover:bg-blue-50 transition-colors relative"
+                  >
+                    <ShoppingCart className="w-5 h-5 text-[#0a1f44]" />
+                    <span className="text-xs font-semibold text-gray-700">Cart</span>
+                    {cartCount > 0 && (
+                      <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] bg-[#0a1f44] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                        {cartCount > 9 ? "9+" : cartCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+                {showCartWishlist && (
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); goWishlist(); }}
+                    className="flex flex-col items-center gap-1 py-3 rounded-xl bg-gray-50 hover:bg-red-50 transition-colors relative"
+                  >
+                    <Heart className="w-5 h-5 text-[#0a1f44]" />
+                    <span className="text-xs font-semibold text-gray-700">Wishlist</span>
+                    {wishlistCount > 0 && (
+                      <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] bg-[#0a1f44] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                        {wishlistCount > 9 ? "9+" : wishlistCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setTimeout(() => setShowNotifPanel(true), 100);
+                  }}
+                  className="flex flex-col items-center gap-1 py-3 rounded-xl bg-gray-50 hover:bg-yellow-50 transition-colors relative"
+                >
+                  <Bell className="w-5 h-5 text-[#0a1f44]" />
+                  <span className="text-xs font-semibold text-gray-700">Alerts</span>
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] bg-[#de1c0e] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+
+            <div className="border-t border-gray-100 my-2" />
+
+            {/* ── More / Become Dealer ── */}
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider pt-1 pb-2">More</p>
+            <Link
+              to="/become-dealer"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 py-2.5 text-sm text-gray-700 hover:text-[#0a1f44]"
+            >
+              <Wrench className="w-4 h-4 text-[#0a1f44]" />
+              <div>
+                <p className="font-semibold">Become a Dealer</p>
+                <p className="text-xs text-gray-400">Partner with TVS</p>
+              </div>
+            </Link>
+            <Link
+              to="/customer-care"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 py-2.5 text-sm text-gray-700 hover:text-[#0a1f44]"
+            >
+              <Shield className="w-4 h-4 text-[#0a1f44]" />
+              <div>
+                <p className="font-semibold">24×7 Support</p>
+                <p className="text-xs text-gray-400">We're here to help</p>
+              </div>
+            </Link>
+
             {isDealer && (
-              <Link to="/dealer" className="flex items-center gap-2 py-2 text-sm font-semibold text-[#0a1f44]">
+              <Link
+                to="/dealer"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 py-2.5 text-sm font-semibold text-[#0a1f44]"
+              >
                 <Store className="w-4 h-4" /> Dealer Dashboard
               </Link>
             )}
             {isAdmin && (
-              <Link to="/admin" className="flex items-center gap-2 py-2 text-sm font-semibold text-red-600">
+              <Link
+                to="/admin"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 py-2.5 text-sm font-semibold text-red-600"
+              >
                 <Settings className="w-4 h-4" /> Admin Dashboard
               </Link>
             )}
-            <Link to="/become-dealer" className="flex items-center gap-2 py-2 text-sm text-gray-700 hover:text-[#0a1f44]">
-              <Wrench className="w-4 h-4" /> Become a Dealer
-            </Link>
-            <Link to="/customer-care" className="flex items-center gap-2 py-2 text-sm text-gray-700 hover:text-[#0a1f44]">
-              <Shield className="w-4 h-4" /> 24×7 Support
-            </Link>
+
             <div className="border-t border-gray-100 my-2" />
+
+            {/* ── Shop by Category ── */}
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider py-1">Shop by Category</p>
             {catsLoading ? (
               <div className="space-y-2 py-2">
-                {[...Array(6)].map((_, i) => <div key={i} className="h-8 rounded-lg bg-gray-100 animate-pulse" />)}
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="h-8 rounded-lg bg-gray-100 animate-pulse" />
+                ))}
               </div>
             ) : (
               categories.map(({ name, slug, subCategories = [] }) => {
@@ -581,6 +833,28 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
                 );
               })
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile notification panel overlay */}
+      {showNotifPanel && (
+        <div
+          className="sm:hidden fixed inset-0 z-50 bg-black/40"
+          onClick={() => setShowNotifPanel(false)}
+        >
+          <div
+            className="absolute right-0 top-0 bottom-0 w-full max-w-sm bg-white shadow-2xl overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <NotificationPanel
+              notifications={notifications}
+              unreadCount={unreadCount}
+              markRead={markRead}
+              markAllRead={markAllRead}
+              deleteNotif={deleteNotif}
+              onClose={() => setShowNotifPanel(false)}
+            />
           </div>
         </div>
       )}

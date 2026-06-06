@@ -12,20 +12,20 @@ const HELP_LINKS = [
 ];
 
 const TVS_INFO = [
-  { label: "Founded in 1978",                value: "" },
-  { label: "Headquartered in Hosur, TN",     value: "" },
-  { label: "ISO 9001:2015 Certified",         value: "" },
-  { label: "1 Year Warranty on All Parts",    value: "" },
-  { label: "Pan-India Dealer Network",        value: "" },
-  { label: "OEM-Grade Spare Parts",           value: "" },
-  { label: "Over 10 Million Customers",       value: "" },
+  { label: "Founded in 1978"                },
+  { label: "Headquartered in Hosur, TN"     },
+  { label: "ISO 9001:2015 Certified"        },
+  { label: "1 Year Warranty on All Parts"   },
+  { label: "Pan-India Dealer Network"       },
+  { label: "OEM-Grade Spare Parts"          },
+  { label: "Over 10 Million Customers"      },
 ];
 
 export default function Footer() {
   return (
     <footer className="bg-[#0a1f44] text-gray-300 mt-16">
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+      <div className="max-w-screen-2xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-10 md:py-12">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
 
           {/* ── Brand ── */}
           <div className="col-span-2 md:col-span-1">
@@ -113,11 +113,12 @@ export default function Footer() {
 
       {/* Bottom bar */}
       <div className="border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="max-w-screen-2xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-4
+                        flex flex-col sm:flex-row items-center justify-between gap-2">
           <p className="text-xs text-gray-500">
             © {new Date().getFullYear()} TVS Motor Company. All rights reserved.
           </p>
-          <div className="flex items-center gap-4 text-xs text-gray-500">
+          <div className="flex items-center gap-3 md:gap-4 text-xs text-gray-500 flex-wrap justify-center">
             <span className="flex items-center gap-1">
               <Wrench className="w-3 h-3" /> OEM Certified Parts
             </span>
