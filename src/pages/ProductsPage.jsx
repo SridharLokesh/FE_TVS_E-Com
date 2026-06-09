@@ -174,27 +174,52 @@ export default function ProductsPage({ auth, cartHook, wishlistHook, onSubPillsV
         </div>
       </div>
 
-      {/* Sub-category pills — only render when activeCat resolved AND has subs */}
+      {/* Sub-category filter — dropdown on mobile/tablet, pills on desktop */}
       {catsReady && activeSubs.length > 0 && (
-        <div ref={subPillsRef} className="flex flex-wrap gap-2 mb-6">
-          <button
-            onClick={() => navigate(`/products/category/${activeCat.slug}`)}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border
-              ${!subSlug
-                ? "bg-[#0a1f44] text-white border-[#0a1f44]"
-                : "bg-white text-gray-500 border-gray-200 hover:border-[#0a1f44] hover:text-[#0a1f44]"}`}>
-            All {activeCat.name}
-          </button>
-          {activeSubs.map(sub => (
-            <button key={sub.slug}
-              onClick={() => navigate(`/products/category/${activeCat.slug}?sub=${sub.slug}`)}
+        <div ref={subPillsRef} className="mb-6">
+
+          {/* ── Mobile & Tablet dropdown (up to md = 768px) ── */}
+          <div className="md:hidden">
+            <div className="relative">
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <select
+                value={subSlug || ""}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (!val) navigate(`/products/category/${activeCat.slug}`);
+                  else      navigate(`/products/category/${activeCat.slug}?sub=${val}`);
+                }}
+                className="w-full appearance-none input-field text-sm pr-9 cursor-pointer font-semibold"
+              >
+                <option value="">All {activeCat.name}</option>
+                {activeSubs.map(sub => (
+                  <option key={sub.slug} value={sub.slug}>{sub.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* ── Desktop pills (md and above) ── */}
+          <div className="hidden md:flex flex-wrap gap-2">
+            <button
+              onClick={() => navigate(`/products/category/${activeCat.slug}`)}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border
-                ${subSlug === sub.slug
+                ${!subSlug
                   ? "bg-[#0a1f44] text-white border-[#0a1f44]"
                   : "bg-white text-gray-500 border-gray-200 hover:border-[#0a1f44] hover:text-[#0a1f44]"}`}>
-              {sub.name}
+              All {activeCat.name}
             </button>
-          ))}
+            {activeSubs.map(sub => (
+              <button key={sub.slug}
+                onClick={() => navigate(`/products/category/${activeCat.slug}?sub=${sub.slug}`)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border
+                  ${subSlug === sub.slug
+                    ? "bg-[#0a1f44] text-white border-[#0a1f44]"
+                    : "bg-white text-gray-500 border-gray-200 hover:border-[#0a1f44] hover:text-[#0a1f44]"}`}>
+                {sub.name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

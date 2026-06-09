@@ -229,27 +229,76 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
 
   return (
     <>
-      <style>{`
-        @keyframes navDropdown {
-          from { opacity:0; transform:translateY(-6px); }
-          to   { opacity:1; transform:translateY(0); }
-        }
-        .nav-dd { animation: navDropdown 0.15s ease both; }
-        @keyframes slideDown {
-          from { opacity:0; transform:translateY(-8px); }
-          to   { opacity:1; transform:translateY(0); }
-        }
-        .mobile-search-animate { animation: slideDown 0.18s ease both; }
-      `}</style>
+     <style>{`
+  @keyframes navDropdown {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .nav-dd {
+    animation: navDropdown 0.15s ease both;
+  }
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .mobile-search-animate {
+    animation: slideDown 0.18s ease both;
+  }
+
+  /* Promo marquee for mobile */
+  @keyframes promoMarquee {
+    0% {
+      transform: translateX(100%);
+    }
+    100% {
+      transform: translateX(-100%);
+    }
+  }
+
+  .promo-marquee {
+    display: inline-block;
+    white-space: nowrap;
+    animation: promoMarquee 10s linear infinite;
+    will-change: transform;
+  }
+
+  @media (min-width: 768px) {
+    .promo-marquee {
+      animation: none;
+      transform: none;
+      white-space: normal;
+    }
+  }
+`}</style>
 
       <header ref={headerRef} className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
         {/* Promo strip — hidden on mobile, driven by admin settings */}
         {siteSettings.promoVisible && (
-          <div
-            className="text-white py-1.5 px-4 text-center text-xs font-medium hidden md:block"
-            style={{ backgroundColor: siteSettings.promoColor }}>
-            {siteSettings.promoText}
-          </div>
+        <div
+  className="text-white overflow-hidden"
+  style={{ backgroundColor: siteSettings.promoColor }}
+>
+  <div className="py-1.5 px-3 text-[11px] sm:text-xs md:text-sm font-medium text-center">
+    <span className="promo-marquee md:whitespace-normal">
+      {siteSettings.promoText}
+    </span>
+  </div>
+</div>
         )}
 
         <div className="max-w-screen-2xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
@@ -318,7 +367,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
             </Link>
 
             {/* ── DESKTOP SEARCH (sm and up) ── */}
-            <div className="hidden sm:flex flex-1 relative" ref={searchRef}>
+            <div className="hidden sm:flex flex-5 relative ml-4 lg:ml-6" ref={searchRef}>
               <form onSubmit={handleSearchSubmit} className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 <input type="text" value={searchQuery} onChange={handleSearchChange}
@@ -358,29 +407,28 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
             </div>
 
             {/* ── Right icons ── */}
-            <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+           <div className="flex items-center gap-1 sm:gap-4 lg:gap-5 ml-2 sm:ml-6 flex-shrink-0">
 
               {/* ══ MOBILE ONLY icons (< sm = < 640px) ══ */}
 
               {/* Mobile: Search icon */}
-            <div className="sm:hidden w-10 mx-2">
-  <form onSubmit={handleSearchSubmit} className="relative">
-    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-    <input
-      type="text"
-      value={searchQuery}
-      onChange={handleSearchChange}
-      placeholder=""
-      className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-full text-sm focus:outline-none focus:border-[#0a1f44]"
-    />
-  </form>
+            <div
+  className="sm:hidden cursor-pointer"
+  onClick={() => {
+    setMobileSearchOpen(true);
+    setMobileMenuOpen(false);
+  }}
+>
+  <button className="p-2.5 rounded-xl bg-gray-200 transition-colors">
+    <Search className="w-4 h-4 text-black-600" />
+  </button>
 </div>
 
               {/* Profile — always visible on all screens */}
               {isLoggedIn ? (
                 <div className="relative" ref={userRef}>
                   <button onClick={() => setShowUserMenu(s => !s)}
-                    className="flex items-center gap-1.5 px-1.5 sm:px-2 md:px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors">
+                   className="flex items-center gap-1 px-1 sm:px-2 md:px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors">
                     <div className="w-7 h-7 bg-[#de1c0e] ml-3 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                       {user?.name?.[0]?.toUpperCase() ?? "U"}
                     </div>
@@ -444,7 +492,7 @@ export default function Navbar({ auth, cartHook, wishlistHook, notifHook, subPil
               {/* More dropdown — desktop */}
               <div className="relative hidden sm:block" ref={moreRef}>
                 <button onClick={() => setShowMoreMenu(s => !s)}
-                  className="flex items-center gap-1 px-2 py-2 rounded-xl hover:bg-gray-100 transition-colors text-sm text-gray-600 font-medium">
+                 className="flex items-center gap-1 px-2 py-2 rounded-xl hover:bg-gray-100 transition-colors text-sm text-gray-600 font-medium">
                   More <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMoreMenu ? "rotate-180" : ""}`} />
                 </button>
                 {showMoreMenu && (
