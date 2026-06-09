@@ -5,15 +5,6 @@ import {
 } from 'lucide-react';
 import { FaFacebook, FaTwitter, FaInstagram, FaYoutube } from 'react-icons/fa';
 import api from '../utils/api';
-
-const BACKEND = import.meta.env.VITE_API_URL
-  ? import.meta.env.VITE_API_URL.replace('/api', '')
-  : 'https://backend-focus-seu6.onrender.com';
-const resolveUrl = (url) => {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${BACKEND}${url}`;
-};
 import toast from 'react-hot-toast';
 
 const LOGO_W = 120;
@@ -122,7 +113,7 @@ export default function AdminSettingsFooter() {
           if (f.socials) setSocials({ ...DEFAULT_SOCIALS, ...f.socials });
           if (f.tagline) setTagline(f.tagline);
           if (f.bottom)  setBottom({ ...DEFAULT_BOTTOM, ...f.bottom });
-          if (f.logo)    setLogoPreview(resolveUrl(f.logo));
+          if (f.logo)    setLogoPreview(f.logo);
         }
       } catch { /* use defaults */ }
       finally { setLoading(false); }

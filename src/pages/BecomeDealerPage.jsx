@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
-  Wrench, MapPin, Phone, Mail, User, Building,
+  MapPin, Phone, Mail, User, Building,
   CheckCircle, ChevronDown, ArrowRight, Store,
   Shield, TrendingUp, Users, Check,
 } from 'lucide-react';
@@ -23,6 +24,143 @@ const BENEFITS = [
   { icon: Users,      title: 'Dedicated Support',    desc: 'Priority support from our dealer relations team and training materials.' },
 ];
 
+const nameRegex  = /^[A-Za-z\s]+$/;
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phoneRegex = /^\+?[0-9]{10,15}$/;
+
+/* ── Custom Select Dropdown (portal-based, navbar-safe) ─────────────── */
+function SelectDropdown({ value, onChange, options, placeholder = "Select…", error = false, id }) {
+  const [open, setOpen]     = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, openUp: false });
+  const triggerRef          = useRef(null);
+  const listRef             = useRef(null);
+
+  const updateCoords = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect       = triggerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const listHeight = 208; // max-h-52 ≈ 208px
+    const openUp     = spaceBelow < listHeight && rect.top > listHeight;
+
+    // Use fixed positioning — coords are viewport-relative, no scrollY offset needed.
+    // This means the list stays pinned to the trigger even while the page scrolls,
+    // and it always renders above the navbar because z-index is unconstrained.
+    setCoords({
+      top:   openUp ? rect.top - listHeight - 4 : rect.bottom + 4,
+      left:  rect.left,
+      width: rect.width,
+      openUp,
+    });
+  }, []);
+
+  // Close only when the PAGE scrolls, not when the user scrolls inside the dropdown list
+  useEffect(() => {
+    if (!open) return;
+    updateCoords();
+    const onScroll = (e) => {
+      // Ignore scroll events that originate from inside the dropdown list itself
+      if (listRef.current && (listRef.current === e.target || listRef.current.contains(e.target))) return;
+      setOpen(false);
+    };
+    const onResize = () => updateCoords();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [open, updateCoords]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (
+        triggerRef.current && !triggerRef.current.contains(e.target) &&
+        listRef.current    && !listRef.current.contains(e.target)
+      ) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const selected = options.find(o => o === value);
+
+  const dropdown = open && ReactDOM.createPortal(
+    <ul
+      ref={listRef}
+      role="listbox"
+      style={{
+        position: 'fixed',
+        top:      coords.top,
+        left:     coords.left,
+        width:    coords.width,
+        zIndex:   99999,
+      }}
+      className="bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-52 overflow-y-auto"
+    >
+      {options.map(opt => {
+        const active = opt === value;
+        return (
+          <li
+            key={opt}
+            role="option"
+            aria-selected={active}
+            onMouseDown={(e) => {
+              e.preventDefault(); // prevent blur firing before onChange
+              onChange(opt);
+              setOpen(false);
+            }}
+            className={`
+              flex items-center justify-between px-3 py-2 text-sm cursor-pointer transition-colors
+              ${active
+                ? 'bg-[#0a1f44] text-white'
+                : 'text-gray-700 hover:bg-[#e8edf5] hover:text-[#0a1f44]'}
+            `}
+          >
+            <span>{opt}</span>
+            {active && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+          </li>
+        );
+      })}
+    </ul>,
+    document.body
+  );
+
+  return (
+    <div id={id}>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`
+          flex items-center justify-between gap-2 w-full
+          px-3 py-2.5 text-sm
+          bg-white rounded-xl border transition-colors
+          focus:outline-none focus:ring-2 focus:ring-[#0a1f44]/20
+          ${error
+            ? 'border-red-400 text-red-600'
+            : open
+              ? 'border-[#0a1f44] text-[#0a1f44]'
+              : 'border-gray-200 text-gray-700 hover:border-[#0a1f44]'}
+        `}
+      >
+        <span className={`truncate ${!selected ? 'text-gray-400' : ''}`}>
+          {selected || placeholder}
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {dropdown}
+    </div>
+  );
+}
+
+/* ── Page ────────────────────────────────────────────────────────────── */
 export default function BecomeDealerPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading,   setLoading]   = useState(false);
@@ -33,18 +171,30 @@ export default function BecomeDealerPage() {
   const [errors, setErrors] = useState({});
 
   const set = (k) => (e) => {
-    setForm(p => ({ ...p, [k]: e.target.value }));
+    let value = e.target.value;
+    if (k === 'name' || k === 'businessName') {
+      if (!/^[A-Za-z\s]*$/.test(value)) return;
+    }
+    if (k === 'phone') {
+      if (!/^\+?[0-9]*$/.test(value)) return;
+    }
+    setForm(p => ({ ...p, [k]: value }));
+    setErrors(p => ({ ...p, [k]: '' }));
+  };
+
+  const setField = (k, v) => {
+    setForm(p => ({ ...p, [k]: v }));
     setErrors(p => ({ ...p, [k]: '' }));
   };
 
   const validate = () => {
     const e = {};
-    if (!form.name.trim())             e.name             = 'Required';
-    if (!form.email.trim())            e.email            = 'Required';
-    if (!form.phone.trim())            e.phone            = 'Required';
-    if (!form.businessName.trim())     e.businessName     = 'Required';
-    if (!form.businessLocation.trim()) e.businessLocation = 'Required';
-    if (!form.state)                   e.state            = 'Required';
+    if (!form.name.trim()         || !nameRegex.test(form.name))        e.name             = 'Valid name required';
+    if (!form.email.trim()        || !emailRegex.test(form.email))       e.email            = 'Valid email required';
+    if (!form.phone.trim()        || !phoneRegex.test(form.phone))       e.phone            = 'Valid phone required (10-15 digits)';
+    if (!form.businessName.trim() || !nameRegex.test(form.businessName)) e.businessName     = 'Valid business name required';
+    if (!form.businessLocation.trim())                                    e.businessLocation = 'Required';
+    if (!form.state)                                                      e.state            = 'Required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -65,11 +215,15 @@ export default function BecomeDealerPage() {
   return (
     <div className="bg-white min-h-screen">
       {/* Hero */}
-      <section className="text-white py-16 px-4"
-        style={{ background: 'linear-gradient(135deg, #071630 0%, #0a1f44 60%, #0d2657 100%)' }}>
+      <section
+        className="text-white py-16 px-4"
+        style={{ background: 'linear-gradient(135deg, #071630 0%, #0a1f44 60%, #0d2657 100%)' }}
+      >
         <div className="max-w-4xl mx-auto text-center">
-          <div className="w-16 h-16 border border-white/20 rounded-2xl flex items-center justify-center mx-auto mb-5"
-            style={{ background: 'rgba(255,255,255,0.1)' }}>
+          <div
+            className="w-16 h-16 border border-white/20 rounded-2xl flex items-center justify-center mx-auto mb-5"
+            style={{ background: 'rgba(255,255,255,0.1)' }}
+          >
             <Store className="w-8 h-8" />
           </div>
           <h1 className="text-3xl md:text-4xl font-black mb-3">Become a TVS Dealer</h1>
@@ -78,9 +232,13 @@ export default function BecomeDealerPage() {
           </p>
           <div className="flex flex-wrap justify-center gap-3 mt-8">
             {['No Joining Fee', '4,000+ Partners Across India', 'Your Own Dashboard'].map(t => (
-              <div key={t} className="flex items-center gap-2 border border-white/20 px-4 py-2 rounded-full text-sm"
-                style={{ background: 'rgba(255,255,255,0.08)' }}>
-                <Check className="w-4 h-4" style={{ color: '#ffff' }} /> {t}
+              <div
+                key={t}
+                className="flex items-center gap-2 border border-white/20 px-4 py-2 rounded-full text-sm"
+                style={{ background: 'rgba(255,255,255,0.08)' }}
+              >
+                <CheckCircle className="w-4 h-4 text-white flex-shrink-0" />
+                <span>{t}</span>
               </div>
             ))}
           </div>
@@ -88,16 +246,21 @@ export default function BecomeDealerPage() {
       </section>
 
       <div className="max-w-6xl mx-auto px-4 py-12 space-y-14">
+
         {/* Benefits */}
         <section>
           <h2 className="text-2xl font-black text-gray-900 text-center mb-2">Why Partner With Us?</h2>
           <p className="text-gray-500 text-sm text-center mb-8">Everything you need to build a successful parts dealership</p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {BENEFITS.map(({ icon: Icon, title, desc }) => (
-              <div key={title}
-                className="card p-5 hover:shadow-md transition-shadow hover:border-[#0a1f44]/30 border-2 border-gray-100">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
-                  style={{ background: '#0a1f44' }}>
+              <div
+                key={title}
+                className="card p-5 hover:shadow-md transition-shadow hover:border-[#0a1f44]/30 border-2 border-gray-100"
+              >
+                <div
+                  className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
+                  style={{ background: '#0a1f44' }}
+                >
                   <Icon className="w-5 h-5 text-white" />
                 </div>
                 <h3 className="font-bold text-gray-900 mb-1 text-sm">{title}</h3>
@@ -112,14 +275,16 @@ export default function BecomeDealerPage() {
           <h2 className="text-2xl font-black text-gray-900 text-center mb-8">How It Works</h2>
           <div className="grid md:grid-cols-4 gap-6">
             {[
-              { step: '01', title: 'Apply Online',    desc: 'Fill the form with your business details' },
-              { step: '02', title: 'Review',          desc: 'Our team reviews your application in 3-5 days' },
-              { step: '03', title: 'Get Approved',    desc: 'Receive your Dealer ID and login credentials' },
-              { step: '04', title: 'Start Selling',   desc: 'List products, manage orders and grow' },
+              { step: '01', title: 'Apply Online',  desc: 'Fill the form with your business details' },
+              { step: '02', title: 'Review',        desc: 'Our team reviews your application in 3-5 days' },
+              { step: '03', title: 'Get Approved',  desc: 'Receive your Dealer ID and login credentials' },
+              { step: '04', title: 'Start Selling', desc: 'List products, manage orders and grow' },
             ].map(({ step, title, desc }) => (
               <div key={step} className="text-center">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black text-white mx-auto mb-3"
-                  style={{ background: '#0a1f44' }}>
+                <div
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black text-white mx-auto mb-3"
+                  style={{ background: '#0a1f44' }}
+                >
                   {step}
                 </div>
                 <h3 className="font-bold text-gray-900 mb-1">{title}</h3>
@@ -129,144 +294,171 @@ export default function BecomeDealerPage() {
           </div>
         </section>
 
-        {/* Application Form */}
-        <section>
-          <div className="max-w-2xl mx-auto">
-            <h2 className="text-2xl font-black text-gray-900 text-center mb-2">Apply Now</h2>
-            <p className="text-gray-500 text-sm text-center mb-8">
-              Already a dealer?{' '}
-              <Link to="/login?type=dealer" className="font-bold hover:underline" style={{ color: '#0a1f44' }}>
-                Login as Dealer
-              </Link>
-            </p>
+        {/* Form */}
+        <section className="max-w-2xl mx-auto">
+          <h2 className="text-2xl font-black text-gray-900 text-center mb-2">Apply Now</h2>
+          <p className="text-gray-500 text-sm text-center mb-8">
+            Already a dealer?{' '}
+            <Link to="/login?type=dealer" className="font-bold hover:underline" style={{ color: '#0a1f44' }}>
+              Login as Dealer
+            </Link>
+          </p>
 
-            <div className="card p-6 md:p-8 border-2 border-gray-100">
-              {submitted ? (
-                <div className="text-center py-12">
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-                    style={{ background: '#e8edf5' }}>
-                    <CheckCircle className="w-8 h-8" style={{ color: '#0a1f44' }} />
-                  </div>
-                  <h3 className="text-xl font-black text-gray-900 mb-2">Application Submitted!</h3>
-                  <p className="text-gray-500 text-sm mb-1">
-                    Confirmation sent to <strong>{form.email}</strong>
-                  </p>
-                  <p className="text-gray-400 text-xs mb-6">
-                    Our dealer relations team will contact you within 3-5 business days.
-                  </p>
-                  <Link to="/" className="btn-primary px-6 py-2.5 text-sm">
-                    Back to Home <ArrowRight className="w-4 h-4" />
-                  </Link>
+          <div className="card p-6 md:p-8 border-2 border-gray-100">
+            {submitted ? (
+              <div className="text-center py-12">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                  style={{ background: '#e8edf5' }}
+                >
+                  <CheckCircle className="w-8 h-8" style={{ color: '#0a1f44' }} />
                 </div>
-              ) : (
-                <form onSubmit={handleSubmit} noValidate className="space-y-4">
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {/* Name */}
-                    <div>
-                      <label className="label">Full Name *</label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                        <input type="text" value={form.name} onChange={set('name')}
-                          placeholder="Your full name"
-                          className={`input-field pl-10 text-sm ${errors.name ? 'input-error' : ''}`} />
-                      </div>
-                      {errors.name && <p className="text-xs mt-1" style={{ color: '#de1c0e' }}>Required</p>}
-                    </div>
+                <h3 className="text-xl font-black text-gray-900 mb-2">Application Submitted!</h3>
+                <p className="text-gray-500 text-sm mb-1">
+                  Confirmation sent to <strong>{form.email}</strong>
+                </p>
+                <p className="text-gray-400 text-xs mb-6">
+                  Our dealer relations team will contact you within 3-5 business days.
+                </p>
+                <Link to="/" className="btn-primary px-6 py-2.5 text-sm">
+                  Back to Home <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} noValidate className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
 
-                    {/* Email */}
-                    <div>
-                      <label className="label">Email Address *</label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                        <input type="email" value={form.email} onChange={set('email')}
-                          placeholder="business@example.com"
-                          className={`input-field pl-10 text-sm ${errors.email ? 'input-error' : ''}`} />
-                      </div>
-                      {errors.email && <p className="text-xs mt-1" style={{ color: '#de1c0e' }}>Required</p>}
-                    </div>
-
-                    {/* Phone */}
-                    <div>
-                      <label className="label">Phone Number *</label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                        <input type="tel" value={form.phone} onChange={set('phone')}
-                          placeholder="+91 XXXXX XXXXX"
-                          className={`input-field pl-10 text-sm ${errors.phone ? 'input-error' : ''}`} />
-                      </div>
-                      {errors.phone && <p className="text-xs mt-1" style={{ color: '#de1c0e' }}>Required</p>}
-                    </div>
-
-                    {/* Business Name */}
-                    <div>
-                      <label className="label">Business Name *</label>
-                      <div className="relative">
-                        <Building className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                        <input type="text" value={form.businessName} onChange={set('businessName')}
-                          placeholder="Your shop / company"
-                          className={`input-field pl-10 text-sm ${errors.businessName ? 'input-error' : ''}`} />
-                      </div>
-                      {errors.businessName && <p className="text-xs mt-1" style={{ color: '#de1c0e' }}>Required</p>}
-                    </div>
-
-                    {/* Location */}
-                    <div>
-                      <label className="label">Business Location *</label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                        <input type="text" value={form.businessLocation} onChange={set('businessLocation')}
-                          placeholder="City, Area"
-                          className={`input-field pl-10 text-sm ${errors.businessLocation ? 'input-error' : ''}`} />
-                      </div>
-                      {errors.businessLocation && <p className="text-xs mt-1" style={{ color: '#de1c0e' }}>Required</p>}
-                    </div>
-
-                    {/* State */}
-                    <div>
-                      <label className="label">State *</label>
-                      <div className="relative">
-                        <select value={form.state} onChange={set('state')}
-                          className={`input-field text-sm appearance-none cursor-pointer ${errors.state ? 'input-error' : ''}`}>
-                          <option value="">Select state...</option>
-                          {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                      </div>
-                      {errors.state && <p className="text-xs mt-1" style={{ color: '#de1c0e' }}>Required</p>}
-                    </div>
-                  </div>
-
-                  {/* Message */}
+                  {/* Full Name */}
                   <div>
-                    <label className="label">
-                      Additional Message <span className="font-normal text-gray-400">(optional)</span>
-                    </label>
-                    <textarea rows={3} value={form.message} onChange={set('message')}
-                      placeholder="Tell us about your business or experience with TVS products..."
-                      className="input-field resize-none text-sm" />
+                    <label className="label">Full Name *</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+                      <input
+                        type="text"
+                        value={form.name}
+                        onChange={set('name')}
+                        placeholder="Your full name"
+                        className={`input-field pl-10 text-sm ${errors.name ? 'input-error' : ''}`}
+                      />
+                    </div>
+                    {errors.name && <p className="text-xs mt-1 text-red-600">{errors.name}</p>}
                   </div>
 
-                  <button type="submit" disabled={loading} className="btn-primary w-full py-3 text-sm">
-                    {loading ? (
-                      <span className="flex items-center gap-2 justify-center">
-                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Submitting...
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2 justify-center">
-                        Submit Application <ArrowRight className="w-4 h-4" />
-                      </span>
-                    )}
-                  </button>
+                  {/* Email */}
+                  <div>
+                    <label className="label">Email Address *</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+                      <input
+                        type="email"
+                        value={form.email}
+                        onChange={set('email')}
+                        placeholder="business@example.com"
+                        className={`input-field pl-10 text-sm ${errors.email ? 'input-error' : ''}`}
+                      />
+                    </div>
+                    {errors.email && <p className="text-xs mt-1 text-red-600">{errors.email}</p>}
+                  </div>
 
-                  <p className="text-xs text-gray-400 text-center">
-                    By submitting you agree to TVS AutoParts dealer terms. We will email you within 3-5 business days.
-                  </p>
-                </form>
-              )}
-            </div>
+                  {/* Phone */}
+                  <div>
+                    <label className="label">Phone Number *</label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+                      <input
+                        type="tel"
+                        value={form.phone}
+                        onChange={set('phone')}
+                        placeholder="+91 XXXXX XXXXX"
+                        className={`input-field pl-10 text-sm ${errors.phone ? 'input-error' : ''}`}
+                      />
+                    </div>
+                    {errors.phone && <p className="text-xs mt-1 text-red-600">{errors.phone}</p>}
+                  </div>
+
+                  {/* Business Name */}
+                  <div>
+                    <label className="label">Business Name *</label>
+                    <div className="relative">
+                      <Building className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+                      <input
+                        type="text"
+                        value={form.businessName}
+                        onChange={set('businessName')}
+                        placeholder="Your shop / company"
+                        className={`input-field pl-10 text-sm ${errors.businessName ? 'input-error' : ''}`}
+                      />
+                    </div>
+                    {errors.businessName && <p className="text-xs mt-1 text-red-600">{errors.businessName}</p>}
+                  </div>
+
+                  {/* Location */}
+                  <div>
+                    <label className="label">Business Location *</label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+                      <input
+                        type="text"
+                        value={form.businessLocation}
+                        onChange={set('businessLocation')}
+                        placeholder="City, Area"
+                        className={`input-field pl-10 text-sm ${errors.businessLocation ? 'input-error' : ''}`}
+                      />
+                    </div>
+                    {errors.businessLocation && <p className="text-xs mt-1 text-red-600">{errors.businessLocation}</p>}
+                  </div>
+
+                  {/* State — Portal Dropdown */}
+                  <div>
+                    <label className="label">State *</label>
+                    <SelectDropdown
+                      value={form.state}
+                      onChange={(v) => setField('state', v)}
+                      options={INDIAN_STATES}
+                      placeholder="Select state..."
+                      error={!!errors.state}
+                    />
+                    {errors.state && <p className="text-xs mt-1 text-red-600">{errors.state}</p>}
+                  </div>
+
+                </div>
+
+                {/* Message */}
+                <div>
+                  <label className="label">
+                    Additional Message <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={form.message}
+                    onChange={set('message')}
+                    placeholder="Tell us about your business or experience with TVS products..."
+                    className="input-field resize-none text-sm"
+                  />
+                </div>
+
+                {/* Submit */}
+                <button type="submit" disabled={loading} className="btn-primary w-full py-3 text-sm">
+                  {loading ? (
+                    <span className="flex items-center gap-2 justify-center">
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Submitting...
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2 justify-center">
+                      Submit Application <ArrowRight className="w-4 h-4" />
+                    </span>
+                  )}
+                </button>
+
+                <p className="text-xs text-gray-400 text-center">
+                  By submitting you agree to TVS AutoParts dealer terms. We will email you within 3-5 business days.
+                </p>
+              </form>
+            )}
           </div>
         </section>
+
       </div>
     </div>
   );

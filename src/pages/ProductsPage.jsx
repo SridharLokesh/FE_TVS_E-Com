@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import ReactDOM from "react-dom";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-import { ChevronDown, Search, SlidersHorizontal, ChevronRight } from "lucide-react";
+import { ChevronDown, Search, SlidersHorizontal, ChevronRight, Check } from "lucide-react";
 import ProductCard from "../components/ProductCard";
 import { useProducts } from "../hooks/useProducts";
 import api from "../utils/api";
@@ -12,6 +13,217 @@ const SORT_OPTIONS = [
   { label: "Top Rated",         value: "-rating"    },
 ];
 
+/* ── Shared portal hook ──────────────────────────────────────────────── */
+function useDropdownPortal(open, setOpen, triggerRef, listRef) {
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+
+  const updateCoords = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect       = triggerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const listHeight = 256; // max-h-64
+    const openUp     = spaceBelow < listHeight && rect.top > listHeight;
+    setCoords({
+      top:   openUp ? rect.top - listHeight - 4 : rect.bottom + 4,
+      left:  rect.left,
+      width: rect.width,
+    });
+  }, [triggerRef]);
+
+  // Compute coords when opening + close on page scroll, recompute on resize
+  useEffect(() => {
+    if (!open) return;
+    updateCoords();
+    const onScroll = (e) => {
+      if (listRef.current && (listRef.current === e.target || listRef.current.contains(e.target))) return;
+      setOpen(false);
+    };
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", updateCoords);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", updateCoords);
+    };
+  }, [open, setOpen, updateCoords, listRef]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (
+        triggerRef.current && !triggerRef.current.contains(e.target) &&
+        listRef.current    && !listRef.current.contains(e.target)
+      ) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open, setOpen, triggerRef, listRef]);
+
+  return coords;
+}
+
+/* ── Custom Dropdown ─────────────────────────────────────────────────── */
+function CustomDropdown({ value, onChange, options, placeholder = "Select…", className = "" }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef      = useRef(null);
+  const listRef         = useRef(null);
+  const coords          = useDropdownPortal(open, setOpen, triggerRef, listRef);
+
+  const selected = options.find(o => (o.value ?? o) === value);
+  const label    = selected ? (selected.label ?? selected) : placeholder;
+
+  const dropdown = open && ReactDOM.createPortal(
+    <ul
+      ref={listRef}
+      role="listbox"
+      style={{
+        position: "fixed",
+        top:      coords.top,
+        left:     coords.left,
+        width: coords.width,
+minWidth: coords.width,
+        zIndex:   99999,
+      }}
+      className="bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-64 overflow-y-auto"
+    >
+      {options.map(o => {
+        const val    = o.value ?? o;
+        const lbl    = o.label ?? o;
+        const active = val === value;
+        return (
+          <li
+            key={val}
+            role="option"
+            aria-selected={active}
+            onMouseDown={(e) => { e.preventDefault(); onChange(val); setOpen(false); }}
+            className={`
+              flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors
+              ${active
+                ? "bg-[#0a1f44] text-white"
+                : "text-gray-700 hover:bg-[#e8edf5] hover:text-[#0a1f44]"}
+            `}
+          >
+            <span className="flex-1">{lbl}</span>
+            {active && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+          </li>
+        );
+      })}
+    </ul>,
+    document.body
+  );
+
+  return (
+    <div className={className}>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`
+          flex items-center justify-between gap-2 w-full
+          px-3 py-2 text-sm font-medium
+          bg-white border border-gray-200 rounded-xl
+          text-gray-700 hover:border-[#0a1f44] hover:text-[#0a1f44]
+          transition-colors focus:outline-none focus:ring-2 focus:ring-[#0a1f44]/20
+          ${open ? "border-[#0a1f44] text-[#0a1f44]" : ""}
+        `}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+      {dropdown}
+    </div>
+  );
+}
+
+/* ── Sub-category dropdown (mobile) ─────────────────────────────────── */
+function SubCategoryDropdown({ activeCat, activeSubs, subSlug, navigate }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef      = useRef(null);
+  const listRef         = useRef(null);
+  const coords          = useDropdownPortal(open, setOpen, triggerRef, listRef);
+
+  const activeLabel = subSlug
+    ? (activeSubs.find(s => s.slug === subSlug)?.name || subSlug)
+    : `All ${activeCat.name}`;
+
+  const select = (slug) => {
+    setOpen(false);
+    if (!slug) navigate(`/products/category/${activeCat.slug}`);
+    else       navigate(`/products/category/${activeCat.slug}?sub=${slug}`);
+  };
+
+  const dropdown = open && ReactDOM.createPortal(
+    <ul
+      ref={listRef}
+      role="listbox"
+      style={{
+        position: "fixed",
+        top:      coords.top,
+        left:     coords.left,
+       width: coords.width,
+minWidth: coords.width,
+        zIndex:   99999,
+      }}
+      className="bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-64 overflow-y-auto"
+    >
+      <li
+        role="option"
+        aria-selected={!subSlug}
+        onMouseDown={(e) => { e.preventDefault(); select(""); }}
+        className={`
+          flex items-center gap-2 px-4 py-2.5 text-sm font-semibold cursor-pointer transition-colors
+          ${!subSlug ? "bg-[#0a1f44] text-white" : "text-gray-700 hover:bg-[#e8edf5] hover:text-[#0a1f44]"}
+        `}
+      >
+        <span className="flex-1">All {activeCat.name}</span>
+        {!subSlug && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+      </li>
+      {activeSubs.map(sub => (
+        <li
+          key={sub.slug}
+          role="option"
+          aria-selected={subSlug === sub.slug}
+          onMouseDown={(e) => { e.preventDefault(); select(sub.slug); }}
+          className={`
+            flex items-center gap-2 px-4 py-2.5 text-sm font-semibold cursor-pointer transition-colors
+            ${subSlug === sub.slug ? "bg-[#0a1f44] text-white" : "text-gray-700 hover:bg-[#e8edf5] hover:text-[#0a1f44]"}
+          `}
+        >
+          <span className="flex-1">{sub.name}</span>
+          {subSlug === sub.slug && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+        </li>
+      ))}
+    </ul>,
+    document.body
+  );
+
+  return (
+    <div>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`
+          flex items-center justify-between gap-2 w-full
+          px-4 py-2.5 text-sm font-semibold
+          bg-white border-2 rounded-xl transition-colors
+          focus:outline-none focus:ring-2 focus:ring-[#0a1f44]/20
+          ${open ? "border-[#0a1f44] text-[#0a1f44]" : "border-gray-200 text-gray-700 hover:border-[#0a1f44] hover:text-[#0a1f44]"}
+        `}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="truncate">{activeLabel}</span>
+        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+      {dropdown}
+    </div>
+  );
+}
+
+/* ── Skeleton ────────────────────────────────────────────────────────── */
 const Skeleton = () => (
   <div className="card animate-pulse">
     <div className="bg-gray-200 h-44 rounded-t-2xl" />
@@ -24,6 +236,7 @@ const Skeleton = () => (
   </div>
 );
 
+/* ── Page ────────────────────────────────────────────────────────────── */
 export default function ProductsPage({ auth, cartHook, wishlistHook, onSubPillsVisibilityChange }) {
   const { cat }  = useParams();
   const [sp]     = useSearchParams();
@@ -40,7 +253,6 @@ export default function ProductsPage({ auth, cartHook, wishlistHook, onSubPillsV
   const { products, loading, pagination, fetchProducts } = useProducts();
   const observerRef = useRef(null);
 
-  /* ── Fetch categories — setCatsReady ONLY after setCategories ── */
   useEffect(() => {
     setCatsReady(false);
     api.get("/categories?nav=true")
@@ -52,27 +264,18 @@ export default function ProductsPage({ auth, cartHook, wishlistHook, onSubPillsV
       .finally(() => setCatsReady(true));
   }, []);
 
-  /* ── Resolve active category — only after categories loaded ── */
   const activeCat  = catsReady && cat
     ? categories.find(c => c.slug === cat.toLowerCase()) || null
     : null;
   const activeSubs = (activeCat?.subCategories || []).filter(s => s.isActive !== false);
 
-  /* ── Visibility reset when no category ── */
   useEffect(() => {
     if (!cat && onSubPillsVisibilityChange) onSubPillsVisibilityChange(true);
   }, [cat, onSubPillsVisibilityChange]);
 
-  /* ── Callback ref — sets up IntersectionObserver when pill row mounts ── */
   const subPillsRef = useCallback((el) => {
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-      observerRef.current = null;
-    }
-    if (!el) {
-      onSubPillsVisibilityChange?.(true);
-      return;
-    }
+    if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+    if (!el) { onSubPillsVisibilityChange?.(true); return; }
     const observer = new IntersectionObserver(
       ([entry]) => onSubPillsVisibilityChange?.(entry.isIntersecting),
       { threshold: 0, rootMargin: "-150px 0px 0px 0px" }
@@ -81,35 +284,20 @@ export default function ProductsPage({ auth, cartHook, wishlistHook, onSubPillsV
     observerRef.current = observer;
   }, [onSubPillsVisibilityChange]);
 
-  /* ── Reset page on filter change ── */
   useEffect(() => { setPage(1); }, [cat, subSlug, searchQuery, sort]);
 
-  /* ── Fetch products — wait for catsReady so activeCat is resolved ── */
   useEffect(() => {
     if (!catsReady) return;
-
     const params = { sort, page, limit: 20 };
-
     if (cat) {
-      if (activeCat) {
-        // Send exact name + slug — backend matches either
-        params.category     = activeCat.name;   // "Engine Parts"
-        params.categorySlug = activeCat.slug;   // "engine-parts"
-      } else {
-        // Category slug from URL doesn't match any DB category
-        // Send raw cat so backend at least tries
-        params.category     = cat;
-        params.categorySlug = cat;
-      }
+      if (activeCat) { params.category = activeCat.name; params.categorySlug = activeCat.slug; }
+      else           { params.category = cat;            params.categorySlug = cat; }
     }
-
     if (subSlug && activeSubs.length > 0) {
       const subObj = activeSubs.find(s => s.slug === subSlug);
       if (subObj) params.sub = subObj.name;
     }
-
     if (searchQuery) params.search = searchQuery;
-
     fetchProducts(params);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cat, subSlug, searchQuery, sort, page, catsReady, activeCat?.slug]);
@@ -164,42 +352,30 @@ export default function ProductsPage({ auth, cartHook, wishlistHook, onSubPillsV
         </div>
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="w-4 h-4 text-gray-400" />
-          <div className="relative">
-            <select value={sort} onChange={e => setSort(e.target.value)}
-              className="input-field pr-8 appearance-none cursor-pointer py-2 text-sm w-auto pl-3">
-              {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-          </div>
+          <CustomDropdown
+            value={sort}
+            onChange={setSort}
+            options={SORT_OPTIONS}
+            className="w-44"
+          />
         </div>
       </div>
 
-      {/* Sub-category filter — dropdown on mobile/tablet, pills on desktop */}
+      {/* Sub-category filter */}
       {catsReady && activeSubs.length > 0 && (
         <div ref={subPillsRef} className="mb-6">
 
-          {/* ── Mobile & Tablet dropdown (up to md = 768px) ── */}
+          {/* Mobile & Tablet — custom dropdown */}
           <div className="md:hidden">
-            <div className="relative">
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              <select
-                value={subSlug || ""}
-                onChange={e => {
-                  const val = e.target.value;
-                  if (!val) navigate(`/products/category/${activeCat.slug}`);
-                  else      navigate(`/products/category/${activeCat.slug}?sub=${val}`);
-                }}
-                className="w-full appearance-none input-field text-sm pr-9 cursor-pointer font-semibold"
-              >
-                <option value="">All {activeCat.name}</option>
-                {activeSubs.map(sub => (
-                  <option key={sub.slug} value={sub.slug}>{sub.name}</option>
-                ))}
-              </select>
-            </div>
+            <SubCategoryDropdown
+              activeCat={activeCat}
+              activeSubs={activeSubs}
+              subSlug={subSlug}
+              navigate={navigate}
+            />
           </div>
 
-          {/* ── Desktop pills (md and above) ── */}
+          {/* Desktop — pills */}
           <div className="hidden md:flex flex-wrap gap-2">
             <button
               onClick={() => navigate(`/products/category/${activeCat.slug}`)}
