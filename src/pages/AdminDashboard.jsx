@@ -15,8 +15,8 @@ import toast from 'react-hot-toast';
 
 import AdminSettingsNavbar       from '../components/AdminSettingsNavbar';
 import AdminSettingsFooter       from '../components/AdminSettingsFooter';
-import AdminSettingsDealerPage   from '../components/AdminSettingsDealerPage';
-import AdminSettingsCustomerCare from '../components/AdminSettingsCustomerCare';
+import AdminSettingsDealerPage   from '../components/AdminsettingsdealerPage';
+import AdminSettingsCustomerCare from '../components/AdminsettingscustomerCare';
 
 /* ─────────────────── constants ─────────────────── */
 const STATUS_BADGE = {
