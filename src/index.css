@@ -1,5 +1,6 @@
-@import "tailwindcss";
+
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+@import "tailwindcss";
 /* ── CSS Variables — single source of truth for TVS brand colors ── */
 :root {
   --brand: #0a1f44; /* TVS Navy Blue  */
