@@ -1,5 +1,5 @@
 // pages/AdminDashboard.jsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   LayoutDashboard, Users, ShoppingBag, Store, Bell,
   CheckCircle, XCircle, Trash2, ToggleLeft, ToggleRight,
@@ -15,9 +15,8 @@ import toast from 'react-hot-toast';
 
 import AdminSettingsNavbar       from '../components/AdminSettingsNavbar';
 import AdminSettingsFooter       from '../components/AdminSettingsFooter';
-import AdminSettingsDealerPage from '../components/AdminSettingsDealerpage';
-
-import AdminSettingsCustomerCare from '../components/AdminSettingsCustomercare';
+import AdminSettingsDealerPage   from '../components/AdminSettingsDealerPage';
+import AdminSettingsCustomerCare from '../components/AdminSettingsCustomerCare';
 
 /* ─────────────────── constants ─────────────────── */
 const STATUS_BADGE = {
@@ -35,6 +34,12 @@ const INDIAN_STATES  = ['Tamil Nadu','Maharashtra','Karnataka','Telangana','Guja
 const EMPTY_DEALER   = { name:'', email:'', phone:'', password:'', dealerId:'', businessName:'', businessLocation:'', state:'' };
 const EMPTY_CAT      = { name:'', icon:'', color:'', description:'', showInNav:true, showInFooter:true, isActive:true, subCategories:[] };
 
+// localStorage keys
+const LS_TAB           = 'admin_active_tab';
+const LS_SETTINGS_PAGE = 'admin_settings_page';
+const LS_NOTIFY_FORM   = 'admin_notify_form';
+const LS_DEALER_FORM   = 'admin_dealer_form';
+
 const PRESET_COLORS = [
   { hex: '#0a1f44', name: 'Navy' }, { hex: '#1d4ed8', name: 'Blue' },
   { hex: '#0891b2', name: 'Cyan' }, { hex: '#059669', name: 'Green' },
@@ -46,7 +51,7 @@ const PRESET_COLORS = [
   { hex: '#4a1942', name: 'Plum' },
 ];
 
-/* ── ColorPicker (category manager inline) ── */
+/* ── ColorPicker ── */
 function ColorPicker({ value, onChange }) {
   return (
     <div>
@@ -332,14 +337,14 @@ const TAB_LABELS = {
 };
 const SETTINGS_LABELS = {
   navbar: 'Navbar', footer: 'Footer', homepage: 'Home Page',
-  'become-dealer': 'Become a Dealer', helpline: '24×7 Helpline', auth: 'Login & Register',
+  'become-dealer': 'Become a Dealer', helpline: '24×7 Support', auth: 'Login & Register',
 };
 const SETTINGS_NAV = [
   { id: 'navbar',        label: 'Navbar',           Icon: Navigation },
   { id: 'footer',        label: 'Footer',           Icon: FileText   },
   { id: 'homepage',      label: 'Home Page',        Icon: Home       },
   { id: 'become-dealer', label: 'Become a Dealer',  Icon: Handshake  },
-  { id: 'helpline',      label: '24×7 Helpline',    Icon: Phone      },
+  { id: 'helpline',      label: '24×7 Support',     Icon: Phone      },
   { id: 'auth',          label: 'Login & Register', Icon: Lock       },
 ];
 
@@ -352,9 +357,29 @@ const MODAL_META = {
 
 /* ═══════════════ MAIN DASHBOARD ═══════════════ */
 export default function AdminDashboard() {
-  const [tab, setTab]       = useState('overview');
+  // ── Restore tab from localStorage (persists across refreshes) ──
+  const [tab, setTab] = useState(() => {
+    try { return localStorage.getItem(LS_TAB) || 'overview'; } catch { return 'overview'; }
+  });
+
   const [stats, setStats]   = useState(null);
   const [loadingState, setLoading] = useState(false);
+
+  /* Ref to the page-wrapper top so we can scroll to it */
+  const pageTopRef = useRef(null);
+
+  /* Measure actual navbar height for settings sidebar top offset */
+  const [navbarHeight, setNavbarHeight] = useState(64);
+
+  useEffect(() => {
+    const measure = () => {
+      const navbar = document.querySelector('header');
+      if (navbar) setNavbarHeight(navbar.offsetHeight);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   /* Users */
   const [users, setUsers]           = useState([]);
@@ -371,7 +396,15 @@ export default function AdminDashboard() {
   const [dealerModalMode, setDealerModalMode]    = useState('create');
   const [selectedDealer, setSelectedDealer]      = useState(null);
   const [selectedRequest, setSelectedRequest]    = useState(null);
-  const [dealerForm, setDealerForm]              = useState(EMPTY_DEALER);
+
+  // ── Restore dealer form from localStorage ──
+  const [dealerForm, setDealerForm] = useState(() => {
+    try {
+      const saved = localStorage.getItem(LS_DEALER_FORM);
+      return saved ? JSON.parse(saved) : EMPTY_DEALER;
+    } catch { return EMPTY_DEALER; }
+  });
+
   const [resetPassword, setResetPassword]        = useState('');
   const [approveForm, setApproveForm]            = useState({ dealerId: '', password: '' });
   const [savingDealer, setSavingDealer]          = useState(false);
@@ -384,11 +417,98 @@ export default function AdminDashboard() {
   const [selectedOrder, setSelectedOrder]   = useState(null);
   const [orderUpdateForm, setOrderUpdateForm] = useState({ status: '', trackingNumber: '', notes: '' });
 
-  /* Notify */
-  const [notifForm, setNotifForm] = useState({ type: 'best_deal', title: '', message: '', link: '', targetRole: 'user' });
+  // ── Restore notify form from localStorage ──
+  const [notifForm, setNotifForm] = useState(() => {
+    try {
+      const saved = localStorage.getItem(LS_NOTIFY_FORM);
+      return saved ? JSON.parse(saved) : { type: 'best_deal', title: '', message: '', link: '', targetRole: 'user' };
+    } catch { return { type: 'best_deal', title: '', message: '', link: '', targetRole: 'user' }; }
+  });
 
-  /* Settings sub-page */
-  const [settingsPage, setSettingsPage] = useState('navbar');
+  // ── Restore settings page from localStorage ──
+  const [settingsPage, setSettingsPage] = useState(() => {
+    try { return localStorage.getItem(LS_SETTINGS_PAGE) || 'navbar'; } catch { return 'navbar'; }
+  });
+
+  // ── Persist tab to localStorage whenever it changes ──
+  useEffect(() => {
+    try { localStorage.setItem(LS_TAB, tab); } catch {}
+  }, [tab]);
+
+  // ── Persist settingsPage to localStorage whenever it changes ──
+  useEffect(() => {
+    try { localStorage.setItem(LS_SETTINGS_PAGE, settingsPage); } catch {}
+  }, [settingsPage]);
+
+  // ── Persist notifForm to localStorage whenever it changes ──
+  useEffect(() => {
+    try { localStorage.setItem(LS_NOTIFY_FORM, JSON.stringify(notifForm)); } catch {}
+  }, [notifForm]);
+
+  // ── Persist dealerForm to localStorage whenever it changes ──
+  useEffect(() => {
+    try { localStorage.setItem(LS_DEALER_FORM, JSON.stringify(dealerForm)); } catch {}
+  }, [dealerForm]);
+
+  /* ── Scroll helper: scrolls every possible container + window to top ── */
+  const scrollToTop = useCallback((behavior = 'smooth') => {
+    window.scrollTo({ top: 0, behavior });
+    document.documentElement.scrollTo({ top: 0, behavior });
+    document.body.scrollTo({ top: 0, behavior });
+    if (pageTopRef.current) {
+      let el = pageTopRef.current.parentElement;
+      while (el) {
+        if (el.scrollTop > 0) el.scrollTo({ top: 0, behavior });
+        el = el.parentElement;
+      }
+    }
+  }, []);
+
+  /* ── Switch settings page + scroll to top of content area ── */
+  const switchSettingsPage = (id) => {
+    setSettingsPage(id);
+    scrollToTop();
+  };
+
+  /* ── Switch tab + always scroll to top ── */
+  const switchTab = (id) => {
+    setTab(id);
+    scrollToTop();
+  };
+
+  /*
+   * ── Listen for the custom "admin-dashboard-home" event fired by the Navbar
+   *    when the user clicks the "Admin Dashboard" link while already on the
+   *    admin page.  This resets to Overview AND scrolls to top — same as a
+   *    fresh page load.
+   *
+   *    In your Navbar component, fire the event like this:
+   *
+   *      import { useLocation, useNavigate } from 'react-router-dom';
+   *
+   *      const location = useLocation();
+   *      const navigate  = useNavigate();
+   *
+   *      const handleAdminClick = (e) => {
+   *        if (location.pathname === '/admin') {         // already on page
+   *          e.preventDefault();
+   *          window.dispatchEvent(new CustomEvent('admin-dashboard-home'));
+   *        } else {
+   *          navigate('/admin');
+   *        }
+   *      };
+   *
+   *      <Link to="/admin" onClick={handleAdminClick}>Admin Dashboard</Link>
+   */
+  useEffect(() => {
+    const handler = () => {
+      setTab('overview');
+      try { localStorage.setItem(LS_TAB, 'overview'); } catch {}
+      scrollToTop();
+    };
+    window.addEventListener('admin-dashboard-home', handler);
+    return () => window.removeEventListener('admin-dashboard-home', handler);
+  }, [scrollToTop]);
 
   const fetchStats = useCallback(async () => {
     try { const { data } = await api.get('/admin/stats'); setStats(data); } catch {}
@@ -448,8 +568,16 @@ export default function AdminDashboard() {
     catch { toast.error('Delete failed'); }
   };
 
-  const openCreate  = () => { setDealerForm(EMPTY_DEALER); setDealerModalMode('create'); setSelectedDealer(null); setShowDealerModal(true); };
-  const openEdit    = (d) => { setDealerForm({ name: d.name, email: d.email, phone: d.phone||'', password: '', dealerId: d.dealerId, businessName: d.businessName||'', businessLocation: d.businessLocation||'', state: d.dealerState||'' }); setSelectedDealer(d); setDealerModalMode('edit'); setShowDealerModal(true); };
+  const openCreate  = () => {
+    setDealerForm(EMPTY_DEALER);
+    try { localStorage.removeItem(LS_DEALER_FORM); } catch {}
+    setDealerModalMode('create'); setSelectedDealer(null); setShowDealerModal(true);
+  };
+  const openEdit    = (d) => {
+    const form = { name: d.name, email: d.email, phone: d.phone||'', password: '', dealerId: d.dealerId, businessName: d.businessName||'', businessLocation: d.businessLocation||'', state: d.dealerState||'' };
+    setDealerForm(form);
+    setSelectedDealer(d); setDealerModalMode('edit'); setShowDealerModal(true);
+  };
   const openReset   = (d) => { setSelectedDealer(d); setResetPassword(''); setDealerModalMode('reset'); setShowDealerModal(true); };
   const openApprove = (req) => { setSelectedRequest(req); setApproveForm({ dealerId: `TVSD-${String(Math.floor(Math.random()*9000)+1000)}`, password: '' }); setDealerModalMode('approve'); setShowDealerModal(true); };
   const setDF = (k) => (e) => setDealerForm(p => ({ ...p, [k]: e.target.value }));
@@ -460,6 +588,9 @@ export default function AdminDashboard() {
       if (dealerModalMode === 'create') {
         const { data } = await api.post('/dealer/create', dealerForm);
         toast.success(data.message); fetchDealers(dealerSearch, dealerStateFilter); fetchStats();
+        // Clear persisted dealer form after successful create
+        setDealerForm(EMPTY_DEALER);
+        try { localStorage.removeItem(LS_DEALER_FORM); } catch {}
       } else if (dealerModalMode === 'edit') {
         const { data } = await api.put(`/dealer/${selectedDealer._id}/edit`, dealerForm);
         toast.success(data.message); fetchDealers(dealerSearch, dealerStateFilter);
@@ -500,7 +631,13 @@ export default function AdminDashboard() {
 
   const sendNotification = async () => {
     if (!notifForm.title.trim() || !notifForm.message.trim()) { toast.error('Title and message required'); return; }
-    try { const { data } = await api.post('/admin/notifications', notifForm); toast.success(data.message); setNotifForm({ type: 'best_deal', title: '', message: '', link: '', targetRole: 'user' }); }
+    try {
+      const { data } = await api.post('/admin/notifications', notifForm);
+      toast.success(data.message);
+      const cleared = { type: 'best_deal', title: '', message: '', link: '', targetRole: 'user' };
+      setNotifForm(cleared);
+      try { localStorage.removeItem(LS_NOTIFY_FORM); } catch {}
+    }
     catch { toast.error('Failed to send'); }
   };
 
@@ -544,17 +681,18 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="page-wrapper space-y-6">
+    /* ── page-wrapper: ref anchors scroll-to-top ── */
+    <div ref={pageTopRef} className="page-wrapper space-y-6">
       {/* Page title */}
       <div className="flex items-start gap-2">
         <LayoutDashboard className="w-5 h-5 text-[#0a1f44] mt-0.5 flex-shrink-0" />
         <Breadcrumb />
       </div>
 
-      {/* Tabs */}
+      {/* ── Tabs ── */}
       <div className="flex gap-1 bg-gray-100 p-1.5 rounded-2xl overflow-x-auto no-scrollbar">
         {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => setTab(id)}
+          <button key={id} onClick={() => switchTab(id)}
             className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all
               ${tab === id ? 'bg-white shadow text-[#0a1f44]' : 'text-gray-500 hover:text-gray-700'}`}>
             <Icon className="w-4 h-4 flex-shrink-0" />
@@ -930,18 +1068,23 @@ export default function AdminDashboard() {
       {/* ── SETTINGS ── */}
       {tab === 'settings' && (
         <div className="flex flex-col md:flex-row gap-4 md:gap-6 min-h-[500px]">
-          {/* Sidebar */}
           <aside className="w-full md:w-52 flex-shrink-0">
-            <nav className="flex md:flex-col gap-1 overflow-x-auto no-scrollbar md:overflow-visible pb-1 md:pb-0 md:sticky md:top-24">
-              {SETTINGS_NAV.map(({ id, label, Icon }) => (
-                <button key={id} onClick={() => setSettingsPage(id)}
-                  className={`flex-shrink-0 md:w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-left transition-all whitespace-nowrap
-                    ${settingsPage === id ? 'bg-[#0a1f44] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
-                  <Icon className={`w-4 h-4 flex-shrink-0 ${settingsPage === id ? 'text-white' : 'text-[#0a1f44]'}`} />
-                  <span className="truncate">{label}</span>
-                </button>
-              ))}
-            </nav>
+            <div className="md:sticky" style={{ top: `${navbarHeight + 12}px` }}>
+              <div className="hidden md:block px-3 mb-3">
+                <p className="text-[11px] font-bold text-gray-900 uppercase tracking-widest">Edit Page Content</p>
+                <p className="text-xs text-gray-500 mt-0.5">Select a page below to edit its content</p>
+              </div>
+              <nav className="flex md:flex-col gap-1 overflow-x-auto no-scrollbar md:overflow-visible pb-1 md:pb-0">
+                {SETTINGS_NAV.map(({ id, label, Icon }) => (
+                  <button key={id} onClick={() => switchSettingsPage(id)}
+                    className={`flex-shrink-0 md:w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-left transition-all whitespace-nowrap
+                      ${settingsPage === id ? 'bg-[#0a1f44] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
+                    <Icon className={`w-4 h-4 flex-shrink-0 ${settingsPage === id ? 'text-white' : 'text-[#0a1f44]'}`} />
+                    <span className="truncate">{label}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
           </aside>
 
           {/* Content */}
@@ -1069,4 +1212,4 @@ export default function AdminDashboard() {
       )}
     </div>
   );
-}
+}   

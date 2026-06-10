@@ -175,37 +175,44 @@ export default function AdminSettingsCustomerCare() {
   const [ctaEmail,     setCtaEmail]     = useState(SEED.ctaEmail);
   const [ctaHours,     setCtaHours]     = useState(SEED.ctaHours);
 
+  // ── extracted so it can be called on mount AND after save ──
+  const applyData = useCallback((cc) => {
+    if (!cc) return;
+    if (cc.heroTitle)        setHeroTitle(cc.heroTitle);
+    if (cc.heroSubtitle)     setHeroSubtitle(cc.heroSubtitle);
+    if (cc.heroBgColor)      setHeroBgColor(cc.heroBgColor);
+    if (cc.channelsTitle)    setChannelsTitle(cc.channelsTitle);
+    if (cc.channelsSubtitle) setChannelsSubtitle(cc.channelsSubtitle);
+    if (cc.channels?.length) setChannels(cc.channels);
+    if (cc.faqTitle)         setFaqTitle(cc.faqTitle);
+    if (cc.faqSubtitle)      setFaqSubtitle(cc.faqSubtitle);
+    if (cc.faqs?.length)     setFaqs(cc.faqs);
+    if (cc.formTitle)        setFormTitle(cc.formTitle);
+    if (cc.formSubtitle)     setFormSubtitle(cc.formSubtitle);
+    if (cc.formEmail)        setFormEmail(cc.formEmail);
+    if (cc.ctaTitle)         setCtaTitle(cc.ctaTitle);
+    if (cc.ctaSubtitle)      setCtaSubtitle(cc.ctaSubtitle);
+    if (cc.ctaBgType)        setCtaBgType(cc.ctaBgType);
+    if (cc.ctaBgColor)       setCtaBgColor(cc.ctaBgColor);
+    if (cc.ctaBgImage)       setCtaBgPreview(resolveUrl(cc.ctaBgImage));
+    if (cc.ctaPhone)         setCtaPhone(cc.ctaPhone);
+    if (cc.ctaEmail)         setCtaEmail(cc.ctaEmail);
+    if (cc.ctaHours)         setCtaHours(cc.ctaHours);
+  }, []);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const { data } = await api.get('/admin/site-settings');
+      applyData(data?.customerCare);
+    } catch { /* keep seeds */ }
+  }, [applyData]);
+
   useEffect(() => {
     (async () => {
-      try {
-        const { data } = await api.get('/admin/site-settings');
-        const cc = data?.customerCare;
-        if (cc) {
-          if (cc.heroTitle)        setHeroTitle(cc.heroTitle);
-          if (cc.heroSubtitle)     setHeroSubtitle(cc.heroSubtitle);
-          if (cc.heroBgColor)      setHeroBgColor(cc.heroBgColor);
-          if (cc.channelsTitle)    setChannelsTitle(cc.channelsTitle);
-          if (cc.channelsSubtitle) setChannelsSubtitle(cc.channelsSubtitle);
-          if (cc.channels?.length) setChannels(cc.channels);
-          if (cc.faqTitle)         setFaqTitle(cc.faqTitle);
-          if (cc.faqSubtitle)      setFaqSubtitle(cc.faqSubtitle);
-          if (cc.faqs?.length)     setFaqs(cc.faqs); // no slice — show all saved
-          if (cc.formTitle)        setFormTitle(cc.formTitle);
-          if (cc.formSubtitle)     setFormSubtitle(cc.formSubtitle);
-          if (cc.formEmail)        setFormEmail(cc.formEmail);
-          if (cc.ctaTitle)         setCtaTitle(cc.ctaTitle);
-          if (cc.ctaSubtitle)      setCtaSubtitle(cc.ctaSubtitle);
-          if (cc.ctaBgType)        setCtaBgType(cc.ctaBgType);
-          if (cc.ctaBgColor)       setCtaBgColor(cc.ctaBgColor);
-          if (cc.ctaBgImage)       setCtaBgPreview(resolveUrl(cc.ctaBgImage));
-          if (cc.ctaPhone)         setCtaPhone(cc.ctaPhone);
-          if (cc.ctaEmail)         setCtaEmail(cc.ctaEmail);
-          if (cc.ctaHours)         setCtaHours(cc.ctaHours);
-        }
-      } catch { /* keep seeds */ }
-      finally { setLoading(false); }
+      await fetchSettings();
+      setLoading(false);
     })();
-  }, []);
+  }, [fetchSettings]);
 
   const handleCtaBgFile = (file) => {
     if (!file.type.startsWith('image/')) { toast.error('Images only'); return; }
@@ -264,9 +271,16 @@ export default function AdminSettingsCustomerCare() {
       fd.append('ctaEmail',         ctaEmail);
       fd.append('ctaHours',         ctaHours);
       if (ctaBgFile) fd.append('ctaBgImage', ctaBgFile);
-      await api.post('/admin/site-settings', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+
+      const { data } = await api.post('/admin/site-settings', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
       toast.success('Customer care settings saved!');
       setCtaBgFile(null);
+
+      // Re-apply from server response so UI reflects exactly what was persisted
+      applyData(data?.settings?.customerCare);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Save failed');
     } finally { setSaving(false); }
@@ -374,7 +388,7 @@ export default function AdminSettingsCustomerCare() {
         </div>
       </CollapseCard>
 
-      {/* ── FAQs — all saved shown, input capped at FAQ_MAX ── */}
+      {/* ── FAQs ── */}
       <CollapseCard title="FAQs" badge={faqs.length} defaultOpen={false}>
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

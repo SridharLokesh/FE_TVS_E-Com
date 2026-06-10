@@ -1,16 +1,12 @@
 // components/AdminSettingsNavbar.jsx
-import { useState, useRef, useEffect } from 'react';
-import { Save, Upload, Info, CheckCircle, Image } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Save, Upload, Info, CheckCircle } from 'lucide-react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { PRESET_COLORS, CollapseCard, resolveUrl } from '../utils/settingsShared';
 
 const LOGO_W = 120;
 const LOGO_H = 40;
-
-const PROMO_QUICK_COLORS = [
-  '#de1c0e', '#0a1f44', '#16a34a', '#d97706', '#7c3aed', '#0891b2',
-];
 
 export default function AdminSettingsNavbar() {
   const [loading,  setLoading]  = useState(true);
@@ -24,23 +20,27 @@ export default function AdminSettingsNavbar() {
   const [logoFile,    setLogoFile]    = useState(null);
   const logoRef = useRef(null);
 
-  /* fetch */
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const { data } = await api.get('/admin/site-settings');
-        const n = data?.navbar;
-        if (n) {
-          if (n.promoText    != null) setPromoText(n.promoText);
-          if (n.promoVisible != null) setPromoVisible(n.promoVisible);
-          if (n.promoColor)           setPromoColor(n.promoColor);
-          if (n.logoLight)            setLogoPreview(resolveUrl(n.logoLight));
-        }
-      } catch { /* use defaults */ }
-      finally { setLoading(false); }
-    };
-    load();
+  const applyData = useCallback((n) => {
+    if (!n) return;
+    if (n.promoText    != null) setPromoText(n.promoText);
+    if (n.promoVisible != null) setPromoVisible(n.promoVisible);
+    if (n.promoColor)           setPromoColor(n.promoColor);
+    if (n.logoLight)            setLogoPreview(resolveUrl(n.logoLight));
   }, []);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const { data } = await api.get('/admin/site-settings');
+      applyData(data?.navbar);
+    } catch { /* use defaults */ }
+  }, [applyData]);
+
+  useEffect(() => {
+    (async () => {
+      await fetchSettings();
+      setLoading(false);
+    })();
+  }, [fetchSettings]);
 
   const onLogoChange = (e) => {
     const file = e.target.files?.[0];
@@ -62,13 +62,14 @@ export default function AdminSettingsNavbar() {
       fd.append('promoVisible', String(promoVisible));
       fd.append('promoColor',   promoColor);
       if (logoFile) fd.append('logoLight', logoFile);
+
       const { data } = await api.post('/admin/site-settings', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
+
       toast.success('Navbar settings saved!');
       setLogoFile(null);
-      if (data?.settings?.navbar?.logoLight)
-        setLogoPreview(resolveUrl(data.settings.navbar.logoLight));
+      applyData(data?.settings?.navbar);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Save failed');
     } finally { setSaving(false); }
@@ -89,7 +90,6 @@ export default function AdminSettingsNavbar() {
 
       {/* ── Promo Strip ── */}
       <CollapseCard title="Promo Strip">
-        {/* Toggle */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-700">Strip visibility</span>
           <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -103,7 +103,6 @@ export default function AdminSettingsNavbar() {
           </label>
         </div>
 
-        {/* Text */}
         <div>
           <label className="label">Promo Text</label>
           <input
@@ -117,11 +116,9 @@ export default function AdminSettingsNavbar() {
           <p className="text-xs text-gray-400 mt-1">{promoText.length}/200 · Use — as separator</p>
         </div>
 
-        {/* Color — named swatches only */}
         <div>
           <label className="label">Strip Background Color</label>
           <div className="flex flex-wrap gap-2 mt-1">
-            {/* Quick 6 + full 15 */}
             {PRESET_COLORS.map(({ hex, name }) => (
               <button
                 key={hex}
@@ -152,7 +149,6 @@ export default function AdminSettingsNavbar() {
           )}
         </div>
 
-        {/* Live preview */}
         <div>
           <label className="label">Live Preview</label>
           {promoVisible ? (
@@ -175,7 +171,6 @@ export default function AdminSettingsNavbar() {
       {/* ── Navbar Logo ── */}
       <CollapseCard title="Navbar Logo">
         <div className="flex flex-wrap items-start gap-5">
-          {/* Upload zone */}
           <button
             type="button"
             onClick={() => logoRef.current?.click()}
@@ -186,7 +181,6 @@ export default function AdminSettingsNavbar() {
           </button>
           <input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={onLogoChange} />
 
-          {/* Preview */}
           <div>
             <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">
               Preview — {LOGO_W}×{LOGO_H}px

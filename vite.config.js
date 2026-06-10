@@ -16,6 +16,7 @@ export default defineConfig({
         target:'https://backend-focus-seu6.onrender.com/api',
         changeOrigin: true,
         secure: false,
+        
       },
     },
   },

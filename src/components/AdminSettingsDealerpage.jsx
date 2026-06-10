@@ -1,29 +1,139 @@
 // components/AdminSettingsDealerPage.jsx
-import { useState, useRef, useEffect } from 'react';
-import { Save, Plus, Upload, Info, CheckCircle, X, ArrowUp, ArrowDown } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Save, Plus, X, ArrowUp, ArrowDown, ChevronDown, Check } from 'lucide-react';
+import ReactDOM from 'react-dom';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import {
-  PRESET_COLORS, CollapseCard, ColorPicker,
+  CollapseCard, ColorPicker,
   BgTypePicker, ImageUploadZone, BgPreview, resolveUrl,
 } from '../utils/settingsShared';
 
+/* ─────────────────── Portal Dropdown ─────────────────── */
+function useDropdownPortal(open, setOpen, triggerRef, listRef) {
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+
+  const updateCoords = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect       = triggerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const listHeight = 256;
+    const openUp     = spaceBelow < listHeight && rect.top > listHeight;
+    setCoords({
+      top:   openUp ? rect.top - listHeight - 4 : rect.bottom + 4,
+      left:  rect.left,
+      width: rect.width,
+    });
+  }, [triggerRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    updateCoords();
+    const onScroll = (e) => {
+      if (listRef.current && (listRef.current === e.target || listRef.current.contains(e.target))) return;
+      setOpen(false);
+    };
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', updateCoords);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', updateCoords);
+    };
+  }, [open, setOpen, updateCoords, listRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (
+        triggerRef.current && !triggerRef.current.contains(e.target) &&
+        listRef.current    && !listRef.current.contains(e.target)
+      ) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open, setOpen, triggerRef, listRef]);
+
+  return coords;
+}
+
+function PortalDropdown({ value, onChange, options }) {
+  const [open, setOpen]   = useState(false);
+  const triggerRef        = useRef(null);
+  const listRef           = useRef(null);
+  const coords            = useDropdownPortal(open, setOpen, triggerRef, listRef);
+  const selected          = options.find(o => o.value === value);
+
+  const menu = open && ReactDOM.createPortal(
+    <ul
+      ref={listRef}
+      role="listbox"
+      style={{
+        position: 'fixed',
+        top: coords.top,
+        left: coords.left,
+        width: coords.width,
+        minWidth: coords.width,
+        zIndex: 99999,
+      }}
+      className="bg-white border border-gray-200 rounded-xl shadow-xl py-1 max-h-64 overflow-y-auto"
+    >
+      {options.map(o => {
+        const active = o.value === value;
+        return (
+          <li
+            key={o.value}
+            role="option"
+            aria-selected={active}
+            onMouseDown={e => { e.preventDefault(); onChange(o.value); setOpen(false); }}
+            className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer select-none transition-colors
+              ${active ? 'bg-[#0a1f44] text-white' : 'text-gray-700 hover:bg-[#e8edf5] hover:text-[#0a1f44]'}`}
+          >
+            <span className="flex-1">{o.label}</span>
+            {active && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+          </li>
+        );
+      })}
+    </ul>,
+    document.body
+  );
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`input-field flex items-center justify-between gap-2 w-full cursor-pointer text-sm transition-colors
+          ${open ? 'border-[#0a1f44] ring-2 ring-[#0a1f44]/10' : ''}`}
+      >
+        <span className="truncate text-left">{selected?.label ?? 'Select…'}</span>
+        <ChevronDown className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {menu}
+    </>
+  );
+}
+
+/* ─────────────────── constants ─────────────────── */
 const ICON_OPTIONS = [
   'TrendingUp','Shield','Store','Users','Star','Zap',
   'Award','Package','Truck','Headphones','CheckCircle','Globe',
-];
+].map(ic => ({ label: ic, value: ic }));
 
+/* ═══════════════ MAIN COMPONENT ═══════════════ */
 export default function AdminSettingsDealerPage() {
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
 
   /* Hero */
-  const [heroTitle,    setHeroTitle]    = useState('Become a TVS Dealer');
-  const [heroSubtitle, setHeroSubtitle] = useState("Partner with India's leading two-wheeler brand. Sell genuine TVS parts and grow your business.");
-  const [heroBgType,   setHeroBgType]   = useState('color');
-  const [heroBgColor,  setHeroBgColor]  = useState('#0a1f44');
-  const [heroBgPreview,setHeroBgPreview]= useState(null);
-  const [heroBgFile,   setHeroBgFile]   = useState(null);
+  const [heroTitle,     setHeroTitle]     = useState('Become a TVS Dealer');
+  const [heroSubtitle,  setHeroSubtitle]  = useState("Partner with India's leading two-wheeler brand. Sell genuine TVS parts and grow your business.");
+  const [heroBgType,    setHeroBgType]    = useState('color');
+  const [heroBgColor,   setHeroBgColor]   = useState('#0a1f44');
+  const [heroBgPreview, setHeroBgPreview] = useState(null);
+  const [heroBgFile,    setHeroBgFile]    = useState(null);
 
   /* Badge strip */
   const [heroBadges, setHeroBadges] = useState([
@@ -44,32 +154,38 @@ export default function AdminSettingsDealerPage() {
     { icon: 'Users',      title: 'Dedicated Support',    desc: 'Priority support from our dealer relations team and training materials.' },
   ]);
 
-  /* fetch */
+  // ── extracted so it can be called on mount AND after save ──
+  const applyData = useCallback((d) => {
+    if (!d) return;
+    if (d.heroTitle)          setHeroTitle(d.heroTitle);
+    if (d.heroSubtitle)       setHeroSubtitle(d.heroSubtitle);
+    if (d.heroBgType)         setHeroBgType(d.heroBgType);
+    if (d.heroBgColor)        setHeroBgColor(d.heroBgColor);
+    if (d.heroBgImage)        setHeroBgPreview(resolveUrl(d.heroBgImage));
+    if (d.heroBadges?.length) setHeroBadges(d.heroBadges);
+    if (d.whyTitle)           setWhyTitle(d.whyTitle);
+    if (d.whySubtitle)        setWhySubtitle(d.whySubtitle);
+    if (d.benefits?.length)   setBenefits(d.benefits);
+  }, []);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const { data } = await api.get('/admin/site-settings');
+      applyData(data?.dealerPage);
+    } catch { /* keep defaults */ }
+  }, [applyData]);
+
   useEffect(() => {
     (async () => {
-      try {
-        const { data } = await api.get('/admin/site-settings');
-        const d = data?.dealerPage;
-        if (d) {
-          if (d.heroTitle)        setHeroTitle(d.heroTitle);
-          if (d.heroSubtitle)     setHeroSubtitle(d.heroSubtitle);
-          if (d.heroBgType)       setHeroBgType(d.heroBgType);
-          if (d.heroBgColor)      setHeroBgColor(d.heroBgColor);
-          if (d.heroBgImage)      setHeroBgPreview(resolveUrl(d.heroBgImage));
-          if (d.heroBadges?.length) setHeroBadges(d.heroBadges);
-          if (d.whyTitle)         setWhyTitle(d.whyTitle);
-          if (d.whySubtitle)      setWhySubtitle(d.whySubtitle);
-          if (d.benefits?.length) setBenefits(d.benefits);
-        }
-      } catch { /* keep defaults */ }
-      finally { setLoading(false); }
+      await fetchSettings();
+      setLoading(false);
     })();
-  }, []);
+  }, [fetchSettings]);
 
   /* hero bg image handler */
   const handleHeroBgFile = (file) => {
     if (!file.type.startsWith('image/')) { toast.error('Images only'); return; }
-    if (file.size > 4 * 1024 * 1024)    { toast.error('Max 4 MB'); return; }
+    if (file.size > 4 * 1024 * 1024)    { toast.error('Max 4 MB');    return; }
     const reader = new FileReader();
     reader.onload = ev => { setHeroBgPreview(ev.target.result); setHeroBgFile(file); };
     reader.readAsDataURL(file);
@@ -98,19 +214,26 @@ export default function AdminSettingsDealerPage() {
     setSaving(true);
     try {
       const fd = new FormData();
-      fd.append('section',     'dealerPage');
-      fd.append('heroTitle',   heroTitle);
-      fd.append('heroSubtitle',heroSubtitle);
-      fd.append('heroBgType',  heroBgType);
-      fd.append('heroBgColor', heroBgColor);
-      fd.append('heroBadges',  JSON.stringify(heroBadges.filter(b => b.text.trim())));
-      fd.append('whyTitle',    whyTitle);
-      fd.append('whySubtitle', whySubtitle);
-      fd.append('benefits',    JSON.stringify(benefits));
+      fd.append('section',      'dealerPage');
+      fd.append('heroTitle',    heroTitle);
+      fd.append('heroSubtitle', heroSubtitle);
+      fd.append('heroBgType',   heroBgType);
+      fd.append('heroBgColor',  heroBgColor);
+      fd.append('heroBadges',   JSON.stringify(heroBadges.filter(b => b.text.trim())));
+      fd.append('whyTitle',     whyTitle);
+      fd.append('whySubtitle',  whySubtitle);
+      fd.append('benefits',     JSON.stringify(benefits));
       if (heroBgFile) fd.append('heroBgImage', heroBgFile);
-      await api.post('/admin/site-settings', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+
+      const { data } = await api.post('/admin/site-settings', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
       toast.success('Dealer page saved!');
       setHeroBgFile(null);
+
+      // Re-apply from server response so UI reflects exactly what was persisted
+      applyData(data?.settings?.dealerPage);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Save failed');
     } finally { setSaving(false); }
@@ -118,7 +241,7 @@ export default function AdminSettingsDealerPage() {
 
   if (loading) return (
     <div className="space-y-4 animate-pulse max-w-2xl">
-      {[1,2,3].map(i => <div key={i} className="h-24 rounded-2xl bg-gray-100" />)}
+      {[1, 2, 3].map(i => <div key={i} className="h-24 rounded-2xl bg-gray-100" />)}
     </div>
   );
 
@@ -132,30 +255,23 @@ export default function AdminSettingsDealerPage() {
       {/* ── Hero ── */}
       <CollapseCard title="Hero Section">
         <div className="space-y-3">
-          {/* Title */}
           <div>
             <label className="label">Hero Title *</label>
             <input type="text" value={heroTitle} onChange={e => setHeroTitle(e.target.value)}
               className="input-field text-sm" placeholder="Become a TVS Dealer" />
           </div>
-
-          {/* Subtitle */}
           <div>
             <label className="label">Hero Subtitle</label>
             <textarea rows={2} value={heroSubtitle} onChange={e => setHeroSubtitle(e.target.value)}
               className="input-field text-sm resize-none" />
           </div>
-
-          {/* BG type */}
           <div>
             <label className="label">Background Type</label>
             <BgTypePicker value={heroBgType} onChange={setHeroBgType} />
           </div>
-
           {heroBgType === 'color' && (
             <ColorPicker label="Background Color" value={heroBgColor} onChange={setHeroBgColor} />
           )}
-
           {heroBgType === 'image' && (
             <ImageUploadZone
               label="Background Image"
@@ -164,8 +280,6 @@ export default function AdminSettingsDealerPage() {
               hint="Recommended 1400×500px. Image fills the hero. Max 4 MB."
             />
           )}
-
-          {/* Live preview */}
           <div>
             <label className="label">Preview</label>
             <BgPreview bgType={heroBgType} bgColor={heroBgColor} bgPreview={heroBgPreview}>
@@ -197,7 +311,7 @@ export default function AdminSettingsDealerPage() {
         </button>
       </CollapseCard>
 
-      {/* ── Why Partner section titles ── */}
+      {/* ── Why Partner ── */}
       <CollapseCard title="Why Partner — Section Labels">
         <div className="space-y-3">
           <div>
@@ -218,7 +332,6 @@ export default function AdminSettingsDealerPage() {
         <div className="space-y-3">
           {benefits.map((b, i) => (
             <div key={i} className="border-2 border-gray-100 rounded-2xl p-4 space-y-3">
-              {/* Card header */}
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Card {i + 1}</span>
                 <div className="flex items-center gap-1">
@@ -234,19 +347,20 @@ export default function AdminSettingsDealerPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="label">Icon</label>
-                  <select value={b.icon} onChange={e => updateBenefit(i, 'icon', e.target.value)}
-                    className="input-field text-sm">
-                    {ICON_OPTIONS.map(ic => <option key={ic} value={ic}>{ic}</option>)}
-                  </select>
+                  <label className="label text-[11px]">Icon</label>
+                  <PortalDropdown
+                    value={b.icon}
+                    onChange={v => updateBenefit(i, 'icon', v)}
+                    options={ICON_OPTIONS}
+                  />
                 </div>
                 <div>
-                  <label className="label">Card Title</label>
+                  <label className="label text-[11px]">Card Title</label>
                   <input type="text" value={b.title} onChange={e => updateBenefit(i, 'title', e.target.value)}
                     className="input-field text-sm" placeholder="Earn More Revenue" />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="label">Description</label>
+                  <label className="label text-[11px]">Description</label>
                   <textarea rows={2} value={b.desc} onChange={e => updateBenefit(i, 'desc', e.target.value)}
                     className="input-field text-sm resize-none" placeholder="Short description…" />
                 </div>
