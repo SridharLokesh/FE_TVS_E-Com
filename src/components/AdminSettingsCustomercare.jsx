@@ -295,7 +295,7 @@ export default function AdminSettingsCustomerCare() {
   return (
     <div className="space-y-5 max-w-2xl">
       <div>
-        <h3 className="font-black text-gray-900 text-lg">24 × 7 Helpline Page</h3>
+        <h3 className="font-black text-gray-900 text-lg">24 × 7 Customer Support</h3>
         <p className="text-xs text-gray-400 mt-0.5">Edit every visible section. The contact form subjects list is static.</p>
       </div>
 
